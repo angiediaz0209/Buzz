@@ -79,21 +79,14 @@ function CreateEvent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span>Back to Dashboard</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors text-sm mb-6"
+        >
+          <ArrowLeft size={16} />
+          <span>Back to Dashboard</span>
+        </button>
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h1 className="text-3xl font-bold text-lavender-600 mb-2">
             Create New Event

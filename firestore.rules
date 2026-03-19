@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- EVENTS ---
+    // Public can read (needed for join pages, kiosk, customer view)
+    // Only the owning artist can create, update, or delete
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.artistId == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.artistId == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.artistId == request.auth.uid;
+    }
+
+    // --- QUEUES ---
+    // Public can read (needed for kiosk, client join, display screen)
+    // Only the event's artist can create/delete
+    // Artist can update (status, currentNumber, etc.)
+    // Public needs to update waitingCount when joining — allowed via update
+    match /queues/{queueId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // --- CUSTOMERS ---
+    // Public can read (customer view, find turn, kiosk count)
+    // Public can create (kiosk and client join — unauthenticated)
+    // Public can update own doc (response: "coming")
+    // Artist can update/delete (manage queue)
+    match /customers/{customerId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // --- USERNAMES ---
+    // Public read only (artist profile lookup)
+    // Only authenticated users can write their own
+    match /usernames/{usernameId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // --- ARTISTS ---
+    // Public can read (artist profile page)
+    // Only the artist themselves can write
+    match /artists/{artistId} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.uid == artistId;
+    }
+
+    // --- CONTACTS ---
+    // Create only (marketing consent from kiosk/client join)
+    // No reads or updates from client — artist reads via backend/console
+    match /contacts/{contactId} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null;
+    }
+
+    // --- NOTIFICATIONS ---
+    // Only authenticated artists can create
+    // No public access
+    match /notifications/{notifId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

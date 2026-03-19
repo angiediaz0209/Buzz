@@ -11,9 +11,11 @@ import {
   addDoc,
   updateDoc,
   serverTimestamp,
-  onSnapshot
+  onSnapshot,
+  runTransaction
 } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { getTheme } from '../utils/theme';
 
 const RESET_SECONDS = 10;
 
@@ -138,12 +140,13 @@ function Kiosk() {
   };
 
   const getNextNumber = async (queueId) => {
-    const customersRef = collection(db, 'customers');
-    const q = query(customersRef, where('queueId', '==', queueId));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return 1;
-    const numbers = snapshot.docs.map(doc => doc.data().number || 0);
-    return Math.max(...numbers) + 1;
+    const queueRef = doc(db, 'queues', queueId);
+    return await runTransaction(db, async (transaction) => {
+      const queueSnap = await transaction.get(queueRef);
+      const next = (queueSnap.data().lastNumber || 0) + 1;
+      transaction.update(queueRef, { lastNumber: next });
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -225,10 +228,12 @@ function Kiosk() {
     );
   }
 
+  const theme = getTheme(event?.colorTheme);
+
   // SUCCESS SCREEN
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-500 to-softpink-500 flex items-center justify-center p-8">
+      <div className={`min-h-screen bg-gradient-to-br ${theme.gradient} flex items-center justify-center p-8`}>
         <div className="text-center text-white">
           <div className="text-8xl mb-6">🎉</div>
           <h1 className="text-4xl font-bold mb-4">You're In!</h1>
@@ -236,7 +241,7 @@ function Kiosk() {
 
           {/* Big Number */}
           <div className="bg-white rounded-3xl p-12 mb-8 shadow-2xl inline-block">
-            <div className="text-9xl font-bold text-lavender-600">
+            <div className={`text-9xl font-bold ${theme.text}`}>
               #{assignedNumber}
             </div>
           </div>
@@ -263,7 +268,7 @@ function Kiosk() {
           {/* Manual reset button */}
           <button
             onClick={handleReset}
-            className="mt-8 bg-white text-lavender-600 px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all"
+            className={`mt-8 bg-white ${theme.text} px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all`}
           >
             Next Customer →
           </button>
@@ -275,10 +280,10 @@ function Kiosk() {
   // QUEUE SELECTION SCREEN
   if (step === 'select') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center p-8">
+      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-8`}>
         <div className="w-full max-w-2xl">
           <div className="text-center mb-10">
-            <h1 className="text-5xl font-bold text-lavender-600 mb-2">
+            <h1 className={`text-5xl font-bold ${theme.text} mb-2`}>
               🎨 Welcome!
             </h1>
             <p className="text-2xl text-gray-600">Choose your queue</p>
@@ -292,7 +297,7 @@ function Kiosk() {
                   setSelectedQueue(queue);
                   setStep('form');
                 }}
-                className="w-full bg-white rounded-2xl shadow-lg p-8 hover:shadow-xl transition-all text-left border-2 border-transparent hover:border-lavender-300"
+                className={`w-full bg-white rounded-2xl shadow-lg p-8 hover:shadow-xl transition-all text-left border-2 border-transparent ${theme.hoverBorder}`}
               >
                 <div className="flex justify-between items-center">
                   <div>
@@ -305,7 +310,7 @@ function Kiosk() {
                   </div>
                   <div className="text-right">
                     <p className="text-gray-500 text-lg">Now serving</p>
-                    <p className="text-5xl font-bold text-lavender-600">
+                    <p className={`text-5xl font-bold ${theme.text}`}>
                       #{queue.currentNumber || 0}
                     </p>
                   </div>
@@ -320,10 +325,10 @@ function Kiosk() {
 
   // FORM SCREEN
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center p-8">
+    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-8`}>
       <div className="w-full max-w-2xl">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-lavender-600 mb-2">
+          <h1 className={`text-4xl font-bold ${theme.text} mb-2`}>
             🎨 Join {selectedQueue?.name}
           </h1>
           <p className="text-xl text-gray-600">Enter your info below</p>
@@ -422,7 +427,7 @@ function Kiosk() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-6 rounded-xl font-bold text-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+              className={`w-full bg-gradient-to-r ${theme.gradient} text-white py-6 rounded-xl font-bold text-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
             >
               {submitting ? 'Joining...' : 'Get My Number! 🎨'}
             </button>

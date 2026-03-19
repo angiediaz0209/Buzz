@@ -1,40 +1,38 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../firebase';
-import { 
-    doc, 
-    getDoc, 
-    collection, 
-    query, 
-    where, 
-    getDocs,
+import {
+    doc,
+    getDoc,
+    collection,
+    query,
+    where,
     addDoc,
     updateDoc,
-    orderBy,
     serverTimestamp,
-    onSnapshot
+    onSnapshot,
+    runTransaction
   } from 'firebase/firestore';
-import { Calendar, MapPin, Users } from 'lucide-react';
+import { Users, ArrowLeft, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getTheme } from '../utils/theme';
 
 function ClientJoin() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
   const [selectedQueue, setSelectedQueue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(null); // { number, customerDocId }
+  const [artistUsername, setArtistUsername] = useState(null);
   
   const [formData, setFormData] = useState({
-    childName: '',
-    parentName: '',
-    phone: '',
-    email: '',
-    notificationMethod: 'sms',
-    isChild: true,
-    marketingConsent: false
+    name: '',
+    phone: ''
   });
 
   useEffect(() => {
@@ -52,6 +50,12 @@ function ClientJoin() {
         
         const eventData = { id: eventDoc.id, ...eventDoc.data() };
         setEvent(eventData);
+
+        // Look up artist username for back navigation
+        const artistDoc = await getDoc(doc(db, 'artists', eventData.artistId));
+        if (artistDoc.exists() && artistDoc.data().username) {
+          setArtistUsername(artistDoc.data().username);
+        }
 
         // Load visible queues
         const queuesRef = collection(db, 'queues');
@@ -83,84 +87,71 @@ function ClientJoin() {
   }, [eventId]);
 
   const handleChange = (e) => {
-    const value = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setFormData({
       ...formData,
-      [e.target.name]: value
+      [e.target.name]: e.target.value
     });
   };
 
   const getNextNumber = async (queueId) => {
-    const customersRef = collection(db, 'customers');
-    const q = query(
-      customersRef, 
-      where('queueId', '==', queueId)
-    );
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) return 1;
-    
-    // Find highest number without orderBy
-    const numbers = snapshot.docs.map(doc => doc.data().number || 0);
-    return Math.max(...numbers) + 1;
+    const queueRef = doc(db, 'queues', queueId);
+    return await runTransaction(db, async (transaction) => {
+      const queueSnap = await transaction.get(queueRef);
+      const next = (queueSnap.data().lastNumber || 0) + 1;
+      transaction.update(queueRef, { lastNumber: next });
+      return next;
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedQueue) {
+    const queue = queues.length === 1 ? queues[0] : selectedQueue;
+    if (!queue) {
       toast.error('Please select a queue');
       return;
     }
-  
+
     setSubmitting(true);
-  
+
     try {
-      const nextNumber = await getNextNumber(selectedQueue.id);
-      
+      const nextNumber = await getNextNumber(queue.id);
+
       const customerData = {
-        queueId: selectedQueue.id,
+        queueId: queue.id,
         eventId: eventId,
         number: nextNumber,
-        childName: formData.isChild ? formData.childName : '',
-        parentName: formData.parentName,
-        isChild: formData.isChild,
+        name: formData.name,
         phone: formData.phone,
-        email: formData.email || '',
-        notificationMethod: formData.notificationMethod,
         status: 'waiting',
         response: null,
         joinedAt: serverTimestamp()
       };
-  
+
       const docRef = await addDoc(collection(db, 'customers'), customerData);
-  
-      // Save to contacts if consent given
-      if (formData.marketingConsent && (formData.phone || formData.email)) {
-        await addDoc(collection(db, 'contacts'), {
-          parentName: formData.parentName || formData.childName,
-          phone: formData.phone || '',
-          email: formData.email || '',
-          artistId: event.artistId,
-          eventId: eventId,
-          eventType: event.eventType || 'other',
-          consentDate: serverTimestamp(),
-          consentText: "Yes! Notify me about future events from this artist and ArtistLine.",
-          source: 'qr'
-        });
-      }
-  
+
       // Update queue waiting count
-      await updateDoc(doc(db, 'queues', selectedQueue.id), {
-        waitingCount: (selectedQueue.waitingCount || 0) + 1
+      await updateDoc(doc(db, 'queues', queue.id), {
+        waitingCount: (queue.waitingCount || 0) + 1
       });
-  
+
       // Update event total customers
       await updateDoc(doc(db, 'events', eventId), {
         totalCustomers: (event.totalCustomers || 0) + 1
       });
-      
-      toast.success(`You're number ${nextNumber}!`);
-      navigate(`/customer/${docRef.id}`);
+
+      setSuccess({ number: nextNumber, customerDocId: docRef.id });
+
+      // Auto-redirect back to choice screen after 3 seconds
+      const fromArtist = location.state?.artistUsername;
+      setTimeout(() => {
+        if (fromArtist) {
+          navigate(`/artist/${fromArtist}`, { state: { returnToChoice: true } });
+        } else if (artistUsername) {
+          navigate(`/artist/${artistUsername}`, { state: { returnToChoice: true } });
+        } else {
+          navigate(`/customer/${docRef.id}`);
+        }
+      }, 3000);
       
     } catch (error) {
       console.error('Error joining queue:', error);
@@ -170,16 +161,6 @@ function ClientJoin() {
     }
   };
 
-  const formatDate = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long',
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
-  };
 
   if (loading) {
     return (
@@ -203,223 +184,129 @@ function ClientJoin() {
     );
   }
 
+  const theme = getTheme(event.colorTheme);
+
+  // Success screen — shown for 3 seconds after joining
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
+        <CheckCircle size={80} className="text-green-400 mb-6" />
+        <h1 className="text-6xl sm:text-8xl font-bold text-white mb-4">
+          #{success.number}
+        </h1>
+        <p className="text-2xl text-white/80 font-medium">You're in line!</p>
+        <p className="text-white/50 mt-4 text-sm">Redirecting...</p>
+      </div>
+    );
+  }
+
+  // Auto-select if single queue
+  const activeQueue = queues.length === 1 ? queues[0] : selectedQueue;
+
+  const handleBack = () => {
+    const fromArtist = location.state?.artistUsername;
+    if (fromArtist) {
+      navigate(`/artist/${fromArtist}`, { state: { returnToChoice: true } });
+    } else {
+      navigate(-1);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 pb-10">
-      {/* Header */}
+    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} pb-10`}>
+      {/* Header with back button */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-2xl mx-auto px-4 py-6">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold text-lavender-600 mb-2">
-              🎨 {event.name}
-            </h1>
-            <div className="flex flex-col sm:flex-row justify-center gap-3 text-sm text-gray-600">
-              <div className="flex items-center justify-center gap-2">
-                <Calendar size={16} />
-                <span>{formatDate(event.date)}</span>
-              </div>
-              <div className="flex items-center justify-center gap-2">
-                <MapPin size={16} />
-                <span>{event.location?.address}</span>
-              </div>
-            </div>
-          </div>
+        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
+          <button
+            onClick={handleBack}
+            className="text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <ArrowLeft size={22} />
+          </button>
+          <h1 className={`text-lg font-bold ${theme.text}`}>
+            {event.name}
+          </h1>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* Queue Selection */}
-        {!selectedQueue ? (
+        {/* Queue Selection (only when multiple queues) */}
+        {!activeQueue ? (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Choose a Queue</h2>
-            
             {queues.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
                 <p className="text-gray-600">No queues available at this time.</p>
               </div>
             ) : (
-              queues.map((queue) => (
-                <button
-                  key={queue.id}
-                  onClick={() => setSelectedQueue(queue)}
-                  className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all text-left border-2 border-transparent hover:border-lavender-300"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">
-                        {queue.name}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Users size={16} />
-                        <span>{queue.waitingCount || 0} people waiting</span>
+              <>
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">Choose a Queue</h2>
+                {queues.map((queue) => (
+                  <button
+                    key={queue.id}
+                    onClick={() => setSelectedQueue(queue)}
+                    className={`w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all text-left border-2 border-transparent ${theme.hoverBorder}`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900 mb-1">
+                          {queue.name}
+                        </h3>
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Users size={16} />
+                          <span>{queue.waitingCount || 0} people waiting</span>
+                        </div>
                       </div>
+                      <span className={`text-sm font-semibold ${theme.text}`}>Join →</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Current #</p>
-                      <p className="text-3xl font-bold text-lavender-600">
-                        {queue.currentNumber || 0}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                ))}
+              </>
             )}
           </div>
         ) : (
-          /* Join Form */
+          /* Join Form — just name + phone */
           <div className="bg-white rounded-2xl shadow-xl p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-lavender-600">
-                Join {selectedQueue.name}
-              </h2>
-              <button
-                onClick={() => setSelectedQueue(null)}
-                className="text-gray-600 hover:text-gray-900"
-              >
-                ← Back
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name Input */}
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
-                  name="childName"
-                  value={formData.childName}
+                  name="name"
+                  value={formData.name}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
-                  placeholder="Enter name"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors text-lg"
+                  placeholder="Enter your name"
                 />
               </div>
 
-              {/* Is this a child's name? */}
-              <div className="bg-lavender-50 rounded-xl p-4 border-2 border-lavender-200">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    name="isChild"
-                    checked={formData.isChild}
-                    onChange={handleChange}
-                    className="w-5 h-5 text-lavender-600 border-gray-300 rounded focus:ring-lavender-500"
-                  />
-                  <span className="font-medium text-gray-900">
-                    This is a child's name
-                  </span>
-                </label>
-              </div>
-
-              {/* Parent Name (if child) */}
-              {formData.isChild && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Parent/Guardian Name
-                  </label>
-                  <input
-                    type="text"
-                    name="parentName"
-                    value={formData.parentName}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
-                    placeholder="Parent's name (optional)"
-                  />
-                </div>
-              )}
-
-              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
+                  Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="tel"
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
-                  placeholder="555-0123 (optional)"
+                  required
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors text-lg"
+                  placeholder="555-0123"
                 />
               </div>
 
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email (Optional)
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
-                  placeholder="email@example.com"
-                />
-              </div>
-
-              {/* Notification Method */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  How would you like to be notified?
-                </label>
-                <select
-                  name="notificationMethod"
-                  value={formData.notificationMethod}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
-                >
-                  <option value="sms">SMS Text Message</option>
-                  <option value="email">Email</option>
-                  <option value="push">Web Notification</option>
-                  <option value="none">I'll check the screen</option>
-                </select>
-              </div>
-
-              {/* Marketing Consent */}
-              <div className="bg-gradient-to-r from-lavender-50 to-softpink-50 rounded-xl p-5 border-2 border-lavender-200">
-              <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                  type="checkbox"
-                  name="marketingConsent"
-                  checked={formData.marketingConsent}
-                  onChange={handleChange}
-                  className="mt-1 w-5 h-5 text-lavender-600 border-gray-300 rounded focus:ring-lavender-500"
-                  />
-                  <div>
-                  <p className="font-semibold text-gray-900">
-                    🎁 Hear about future events!
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                      Get notified about upcoming events from this artist and similar events in your area. 
-                      We never spam. Unsubscribe anytime.
-                  </p>
-                  </div>
-              </label>
-              </div>
-
-              {/* Submit */}
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+                className={`w-full bg-gradient-to-r ${theme.gradient} text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
               >
-                {submitting ? 'Joining...' : 'Join Queue'}
+                {submitting ? 'Joining...' : 'Get My Turn'}
               </button>
             </form>
           </div>
         )}
-
-        {/* Find My Turn */}
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => navigate(`/event/${eventId}/find`)}
-            className="text-lavender-600 hover:text-lavender-700 font-medium"
-          >
-            Already in queue? Find your turn →
-          </button>
-        </div>
       </main>
     </div>
   );

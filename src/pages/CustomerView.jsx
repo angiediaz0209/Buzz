@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { doc, getDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ArrowLeft, Clock, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getTheme } from '../utils/theme';
 
 function CustomerView() {
   const { customerId } = useParams();
@@ -79,10 +80,13 @@ function CustomerView() {
         });
         toast.success("Great! We'll see you soon!");
       } else if (response === 'skip') {
-        if (confirm("Are you sure you can't make it? You'll be removed from the queue.")) {
-          await deleteDoc(doc(db, 'customers', customerId));
-          toast.success('You have been removed from the queue');
-          navigate(`/join/${event.id}`);
+        if (confirm("Are you sure you can't make it?")) {
+          await updateDoc(doc(db, 'customers', customerId), {
+            status: 'skipped',
+            response: 'skipped',
+            respondedAt: new Date()
+          });
+          toast.success("No worries! You've been removed from the queue.");
         }
       }
     } catch (error) {
@@ -122,9 +126,42 @@ function CustomerView() {
 
   const isYourTurn = customer.status === 'called';
   const isComing = customer.status === 'coming';
+  const isSkipped = customer.status === 'skipped';
+  const isCompleted = customer.status === 'completed';
+  const theme = getTheme(event.colorTheme);
+
+  if (isSkipped) {
+    return (
+      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-4`}>
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
+          <div className="text-5xl mb-4">👋</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">You've Left the Queue</h1>
+          <p className="text-gray-600 mb-6">No worries! You can rejoin anytime.</p>
+          <button
+            onClick={() => navigate(`/join/${event.id}`)}
+            className={`bg-gradient-to-r ${theme.gradient} text-white px-6 py-3 rounded-xl font-semibold`}
+          >
+            Rejoin Queue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isCompleted) {
+    return (
+      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-4`}>
+        <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
+          <div className="text-5xl mb-4">✅</div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">All Done!</h1>
+          <p className="text-gray-600">Thanks for visiting {event.name}!</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 pb-10">
+    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} pb-10`}>
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-2xl mx-auto px-4 py-4">
@@ -154,7 +191,7 @@ function CustomerView() {
               {isYourTurn ? "🎉 IT'S YOUR TURN!" : 'Your Number'}
             </p>
             <div className={`text-8xl font-bold mb-4 ${
-              isYourTurn ? 'text-white' : 'text-lavender-600'
+              isYourTurn ? 'text-white' : theme.text
             }`}>
               #{customer.number}
             </div>
@@ -173,9 +210,9 @@ function CustomerView() {
         {!isYourTurn && (
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="text-center p-4 bg-lavender-50 rounded-xl">
+              <div className={`text-center p-4 ${theme.bg} rounded-xl`}>
                 <p className="text-sm text-gray-600 mb-1">Now Serving</p>
-                <p className="text-4xl font-bold text-lavender-600">
+                <p className={`text-4xl font-bold ${theme.text}`}>
                   #{queue.currentNumber || 0}
                 </p>
               </div>

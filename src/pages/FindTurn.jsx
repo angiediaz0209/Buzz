@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { ArrowLeft, Search } from 'lucide-react';
@@ -8,6 +8,8 @@ import toast from 'react-hot-toast';
 function FindTurn() {
   const { eventId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const artistUsername = location.state?.artistUsername;
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
@@ -34,31 +36,22 @@ function FindTurn() {
         where('phone', '==', searchQuery.trim())
       );
 
-      // Search by child name
-      const childNameQuery = query(
+      // Search by name
+      const nameQuery = query(
         customersRef,
         where('eventId', '==', eventId),
-        where('childName', '==', searchQuery.trim())
+        where('name', '==', searchQuery.trim())
       );
 
-      // Search by parent name
-      const parentNameQuery = query(
-        customersRef,
-        where('eventId', '==', eventId),
-        where('parentName', '==', searchQuery.trim())
-      );
-
-      const [phoneResults, childResults, parentResults] = await Promise.all([
+      const [phoneResults, nameResults] = await Promise.all([
         getDocs(phoneQuery),
-        getDocs(childNameQuery),
-        getDocs(parentNameQuery)
+        getDocs(nameQuery)
       ]);
 
       // Combine results and remove duplicates
       const allDocs = [
         ...phoneResults.docs,
-        ...childResults.docs,
-        ...parentResults.docs
+        ...nameResults.docs
       ];
 
       const uniqueIds = new Set();
@@ -111,11 +104,11 @@ function FindTurn() {
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-2xl mx-auto px-4 py-4">
           <button
-            onClick={() => navigate(`/join/${eventId}`)}
+            onClick={() => artistUsername ? navigate(`/artist/${artistUsername}`, { state: { returnToChoice: true } }) : navigate(-1)}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3"
           >
             <ArrowLeft size={20} />
-            <span>Back to Event</span>
+            <span>Back</span>
           </button>
           <h1 className="text-2xl font-bold text-lavender-600">
             Find Your Turn
@@ -169,10 +162,10 @@ function FindTurn() {
                   Try searching with a different name or phone number
                 </p>
                 <button
-                  onClick={() => navigate(`/join/${eventId}`)}
+                  onClick={() => artistUsername ? navigate(`/artist/${artistUsername}`, { state: { returnToChoice: true } }) : navigate(-1)}
                   className="bg-gradient-to-r from-lavender-500 to-softpink-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
                 >
-                  Join Queue Instead
+                  Go Back
                 </button>
               </div>
             ) : (
@@ -184,13 +177,8 @@ function FindTurn() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-2xl font-bold text-gray-900">
-                        {customer.childName || customer.parentName}
+                        {customer.name || customer.childName || customer.parentName}
                       </h3>
-                      {customer.childName && customer.parentName && (
-                        <p className="text-gray-600 text-sm">
-                          Parent: {customer.parentName}
-                        </p>
-                      )}
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-gray-600">Turn Number</p>

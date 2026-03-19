@@ -15,7 +15,7 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
-import { ArrowLeft, Phone, Mail, Clock, User, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Clock, RefreshCw, X, Undo2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 function ManageQueue() {
@@ -66,14 +66,27 @@ function ManageQueue() {
     orderBy('number', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
     const customersData = snapshot.docs
-        .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-        }))
-        .filter(c => c.status !== 'completed');
+        .map(d => ({
+        id: d.id,
+        ...d.data()
+        }));
     setCustomers(customersData);
+
+    // Sync queue doc counters from real data
+    const waiting = customersData.filter(c => c.status === 'waiting').length;
+    const completed = customersData.filter(c => c.status === 'completed').length;
+    const skipped = customersData.filter(c => c.status === 'skipped').length;
+    try {
+      await updateDoc(doc(db, 'queues', queueId), {
+        waitingCount: waiting,
+        totalServed: completed,
+        skippedCount: skipped
+      });
+    } catch (e) {
+      // Non-critical — queue doc sync failed silently
+    }
     });
 
     return () => unsubscribe();
@@ -86,32 +99,85 @@ function ManageQueue() {
       return;
     }
 
+    const currentlyServing = customers.filter(c => c.status === 'called' || c.status === 'coming');
     const nextCustomer = waiting[0];
-  
+
     try {
-      // Update next customer status
+      // Auto-complete everyone currently being served
+      for (const serving of currentlyServing) {
+        await updateDoc(doc(db, 'customers', serving.id), {
+          status: 'completed',
+          completedAt: serverTimestamp()
+        });
+      }
+
+      // Call the next customer
       await updateDoc(doc(db, 'customers', nextCustomer.id), {
         status: 'called',
         calledAt: serverTimestamp()
       });
-  
-      // Update queue current number and counts
+
+      // Update queue current number
       await updateDoc(doc(db, 'queues', queueId), {
-        currentNumber: nextCustomer.number,
-        waitingCount: Math.max(0, (queue.waitingCount || 0) - 1),
-        totalServed: (queue.totalServed || 0) + 1
+        currentNumber: nextCustomer.number
       });
-  
-      // Vibrate phone
+
       if ('vibrate' in navigator) {
         navigator.vibrate(200);
       }
-  
+
       toast.success(`Called #${nextCustomer.number} - ${nextCustomer.childName || nextCustomer.parentName}`);
-  
+
     } catch (error) {
       console.error('Error calling next number:', error);
       toast.error('Failed to call next number');
+    }
+  };
+
+  const goBack = async () => {
+    // Find the most recently completed customer (the one we just auto-completed)
+    const completed = customers
+      .filter(c => c.status === 'completed' && c.completedAt)
+      .sort((a, b) => {
+        const aTime = a.completedAt?.toMillis ? a.completedAt.toMillis() : 0;
+        const bTime = b.completedAt?.toMillis ? b.completedAt.toMillis() : 0;
+        return bTime - aTime;
+      });
+
+    const currentlyServing = customers.filter(c => c.status === 'called' || c.status === 'coming');
+
+    if (completed.length === 0) {
+      toast.error('Nothing to undo');
+      return;
+    }
+
+    const lastCompleted = completed[0];
+
+    try {
+      // Put current called person back to waiting
+      for (const serving of currentlyServing) {
+        await updateDoc(doc(db, 'customers', serving.id), {
+          status: 'waiting',
+          calledAt: null
+        });
+      }
+
+      // Restore the last completed person back to called
+      await updateDoc(doc(db, 'customers', lastCompleted.id), {
+        status: 'called',
+        completedAt: null
+      });
+
+      // Update queue current number back
+      await updateDoc(doc(db, 'queues', queueId), {
+        currentNumber: lastCompleted.number
+      });
+
+      toast.success(`Restored #${lastCompleted.number} - ${lastCompleted.childName || lastCompleted.parentName}`);
+
+    } catch (error) {
+      console.error('Error going back:', error);
+      toast.error('Failed to go back');
     }
   };
 
@@ -213,21 +279,24 @@ function ManageQueue() {
   const waitingCustomers = customers.filter(c => c.status === 'waiting');
   const calledCustomers = customers.filter(c => c.status === 'called');
   const comingCustomers = customers.filter(c => c.status === 'coming');
+  const completedCustomers = customers.filter(c => c.status === 'completed');
+  const skippedCustomers = customers.filter(c => c.status === 'skipped');
+  const servingCustomers = [...calledCustomers, ...comingCustomers];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 pb-20">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      {/* Queue Controls */}
+      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-14 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3">
           <button
             onClick={() => navigate(`/event/${event.id}`)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3"
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors text-sm mb-2"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={16} />
             <span>Back to Event</span>
           </button>
 
-          <div className="flex justify-between items-start">
+          <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{queue.name}</h1>
               <p className="text-sm text-gray-600">{event.name}</p>
@@ -245,54 +314,70 @@ function ManageQueue() {
             </button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 py-6">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Current #</p>
+            <p className="text-sm text-gray-600">Now Serving</p>
             <p className="text-3xl font-bold text-lavender-600">
-              {queue.currentNumber || 0}
+              #{queue.currentNumber || 0}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-gray-600">In Queue</p>
+            <p className="text-sm text-gray-600">Waiting</p>
             <p className="text-3xl font-bold text-softpink-600">
               {waitingCustomers.length}
             </p>
           </div>
           <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-gray-600">Total Served</p>
+            <p className="text-sm text-gray-600">Completed</p>
             <p className="text-3xl font-bold text-gray-700">
-              {queue.totalServed || 0}
+              {completedCustomers.length}
             </p>
           </div>
         </div>
 
-        {/* Call Next Button */}
-        <button
-          onClick={callNextNumber}
-          disabled={waitingCustomers.length === 0}
-          className="w-full bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-5 rounded-xl font-bold text-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-6"
-        >
-          📢 Call Next Number
-        </button>
+        {/* Action Buttons */}
+        <div className="flex gap-3 mb-6">
+          <button
+            onClick={callNextNumber}
+            disabled={waitingCustomers.length === 0}
+            className="flex-1 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-5 rounded-xl font-bold text-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {servingCustomers.length > 0 ? 'Next Number' : 'Call First Number'}
+          </button>
+          <button
+            onClick={goBack}
+            disabled={completedCustomers.length === 0}
+            className="px-5 py-5 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Undo last call"
+          >
+            <Undo2 size={24} />
+          </button>
+        </div>
 
-        {/* Currently Called */}
-        {calledCustomers.length > 0 && (
+        {/* Currently Serving */}
+        {servingCustomers.length > 0 && (
           <div className="mb-6">
             <h2 className="text-lg font-bold text-gray-900 mb-3">Currently Serving</h2>
-            {calledCustomers.map((customer) => (
+            {servingCustomers.map((customer) => (
               <div
                 key={customer.id}
-                className="bg-green-50 border-2 border-green-300 rounded-xl p-4 mb-3"
+                className={`rounded-xl p-4 mb-3 ${
+                  customer.status === 'coming'
+                    ? 'bg-blue-50 border-2 border-blue-300'
+                    : 'bg-green-50 border-2 border-green-300'
+                }`}
               >
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <span className="text-3xl font-bold text-green-600">
+                      <span className={`text-3xl font-bold ${
+                        customer.status === 'coming' ? 'text-blue-600' : 'text-green-600'
+                      }`}>
                         #{customer.number}
                       </span>
                       <div>
@@ -302,26 +387,24 @@ function ManageQueue() {
                         {customer.childName && customer.parentName && (
                           <p className="text-sm text-gray-600">Parent: {customer.parentName}</p>
                         )}
+                        {customer.status === 'coming' && (
+                          <p className="text-xs text-blue-600 font-semibold mt-1">On their way</p>
+                        )}
                       </div>
                     </div>
-                    
+
                     {customer.phone && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Phone size={14} />
                         <span>{customer.phone}</span>
                       </div>
                     )}
-                    
-                    {customer.response && (
-                      <p className="text-sm text-green-700 mt-2">
-                        ✓ Response: {customer.response}
-                      </p>
-                    )}
                   </div>
 
                   <button
                     onClick={() => resendNotification(customer)}
                     className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-200"
+                    title="Resend notification"
                   >
                     <RefreshCw size={16} />
                   </button>
@@ -331,45 +414,12 @@ function ManageQueue() {
           </div>
         )}
 
-        {/* Coming Soon */}
-        {comingCustomers.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Coming Soon</h2>
-            {comingCustomers.map((customer) => (
-              <div
-                key={customer.id}
-                className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-3"
-              >
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl font-bold text-blue-600">
-                      #{customer.number}
-                    </span>
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {customer.childName || customer.parentName}
-                      </p>
-                      <p className="text-xs text-blue-600">✓ Marked as coming</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => removeCustomer(customer)}
-                    className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Waiting Queue */}
-        <div>
+        <div className="mb-6">
           <h2 className="text-lg font-bold text-gray-900 mb-3">
             Waiting ({waitingCustomers.length})
           </h2>
-          
+
           {waitingCustomers.length === 0 ? (
             <div className="bg-white rounded-xl p-8 text-center">
               <p className="text-gray-500">No customers waiting</p>
@@ -393,7 +443,7 @@ function ManageQueue() {
                         {customer.childName && customer.parentName && (
                           <p className="text-sm text-gray-600">Parent: {customer.parentName}</p>
                         )}
-                        
+
                         <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
                           {customer.phone && (
                             <div className="flex items-center gap-1">
@@ -407,42 +457,89 @@ function ManageQueue() {
                               <span>Joined {formatTime(customer.joinedAt)}</span>
                             </div>
                           )}
-                          {customer.notificationMethod && (
-                            <div className="flex items-center gap-1">
-                              <Mail size={12} />
-                              <span className="capitalize">{customer.notificationMethod}</span>
-                            </div>
-                          )}
                         </div>
-                        
+
                         {index === 0 && (
                           <p className="text-xs text-green-600 font-semibold mt-2">
-                            ⭐ Next in line
+                            Next in line
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => resendNotification(customer)}
-                        className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-200"
-                      >
-                        Resend
-                      </button>
-                      <button
-                        onClick={() => removeCustomer(customer)}
-                        className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => removeCustomer(customer)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                      title="Remove from queue"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Didn't Show */}
+        {skippedCustomers.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-500 mb-3">
+              Didn't Show ({skippedCustomers.length})
+            </h2>
+            <div className="space-y-2">
+              {skippedCustomers.map((customer) => (
+                <div
+                  key={customer.id}
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-3"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-gray-400">
+                        #{customer.number}
+                      </span>
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          {customer.childName || customer.parentName}
+                        </p>
+                        {customer.childName && customer.parentName && (
+                          <p className="text-xs text-gray-400">Parent: {customer.parentName}</p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400">Said no</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Completed */}
+        {completedCustomers.length > 0 && (
+          <div>
+            <h2 className="text-lg font-bold text-gray-500 mb-3">
+              Completed ({completedCustomers.length})
+            </h2>
+            <div className="space-y-2">
+              {completedCustomers.map((customer) => (
+                <div
+                  key={customer.id}
+                  className="bg-gray-50 border border-gray-200 rounded-xl p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold text-gray-400">
+                      #{customer.number}
+                    </span>
+                    <p className="text-sm text-gray-500">
+                      {customer.childName || customer.parentName}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

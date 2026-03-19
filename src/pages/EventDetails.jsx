@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';import { ArrowLeft, Plus, Calendar, MapPin, Palette, Users, Monitor, QrCode } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getTheme } from '../utils/theme';
 
 function EventDetails() {
   const { eventId } = useParams();
@@ -13,10 +14,6 @@ function EventDetails() {
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showQR, setShowQR] = useState(false);
-  const [artistUsername, setArtistUsername] = useState('');
-
-  const permanentUrl = `${window.location.origin}/artistline/artist/${artistUsername}`;
 
   useEffect(() => {
     if (!eventId || !currentUser) return;
@@ -26,14 +23,6 @@ function EventDetails() {
         const eventDoc = await getDoc(doc(db, 'events', eventId));
         if (eventDoc.exists()) {
           const eventData = { id: eventDoc.id, ...eventDoc.data() };
-
-          // Load artist username
-          const artistDoc = await getDoc(doc(db, 'artists', eventData.artistId));
-          if (artistDoc.exists()) {
-            setArtistUsername(artistDoc.data().username);
-            eventData.username = artistDoc.data().username;
-          }
-
           setEvent(eventData);
         } else {
           toast.error('Event not found');
@@ -90,10 +79,6 @@ function EventDetails() {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
@@ -106,6 +91,8 @@ function EventDetails() {
   }
 
   if (!event) return null;
+
+  const theme = getTheme(event.colorTheme);
 
   const handleDeleteQueue = async (e, queueId) => {
     e.stopPropagation();
@@ -130,142 +117,37 @@ function EventDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50">
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #qr-print-section, #qr-print-section * { visibility: visible; }
-          #qr-print-section { 
-            position: fixed; 
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-          }
-        }
-      `}</style>
-
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-4"
-          >
-            <ArrowLeft size={20} />
-            <span>Back to Dashboard</span>
-          </button>
-
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
-              <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <Calendar size={16} className="text-lavender-500" />
-                  <span>{formatDate(event.date)}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin size={16} className="text-lavender-500" />
-                  <span>{event.location?.address || 'No location'}</span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={closeEvent}
-              className="px-4 py-2 border-2 border-red-300 text-red-700 rounded-lg font-semibold hover:bg-red-50 transition-colors"
-            >
-              Close Event
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
+    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg}`}>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-        {/* Share + QR Section */}
-        <div className="bg-gradient-to-r from-lavender-500 to-softpink-500 rounded-2xl shadow-xl p-6 mb-8 text-white">
-          <h2 className="text-xl font-bold mb-4">📱 Share Your Permanent Link</h2>
-          <p className="mb-4 opacity-90">
-            Give this ONE link to clients - it always shows your active events!
-          </p>
-
-          <div className="bg-white/20 backdrop-blur rounded-lg p-4 mb-4">
-            <p className="text-sm opacity-75 mb-2">Your permanent URL:</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={permanentUrl}
-                readOnly
-                className="flex-1 px-4 py-2 bg-white/30 backdrop-blur rounded-lg border-2 border-white/50 text-white font-mono text-sm"
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(permanentUrl);
-                  toast.success('Link copied!');
-                }}
-                className="px-6 py-2 bg-white text-lavender-600 rounded-lg font-semibold hover:shadow-lg transition-all"
-              >
-                Copy
-              </button>
+        {/* Event Header */}
+        <div className="flex justify-between items-start mb-8">
+          <div>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3 text-sm"
+            >
+              <ArrowLeft size={16} />
+              <span>Back to Dashboard</span>
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
+            <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2">
+                <Calendar size={16} className="text-lavender-500" />
+                <span>{formatDate(event.date)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin size={16} className="text-lavender-500" />
+                <span>{event.location?.address || 'No location'}</span>
+              </div>
             </div>
           </div>
 
-          {/* QR Code + Display Buttons */}
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setShowQR(!showQR)}
-              className="flex items-center gap-2 bg-white text-lavender-600 px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
-            >
-              <QrCode size={20} />
-              {showQR ? 'Hide QR Code' : 'Show QR Code'}
-            </button>
-
-            <button
-              onClick={() => window.open(`/display/${eventId}`, '_blank')}
-              className="flex items-center gap-2 bg-white/20 text-white border-2 border-white/50 px-6 py-3 rounded-xl font-semibold hover:bg-white/30 transition-all"
-            >
-              <Monitor size={20} />
-              Open Display Screen
-            </button>
-          </div>
-
-          {/* QR Code Display */}
-          {showQR && (
-            <div className="mt-6">
-              <div 
-                id="qr-print-section"
-                className="bg-white rounded-2xl p-8 text-center inline-block"
-              >
-                <p className="text-lavender-600 font-bold text-xl mb-4">
-                  🎨 Scan to Join Queue
-                </p>
-                <QRCodeSVG
-                  value={permanentUrl}
-                  size={200}
-                  level="H"
-                  includeMargin={true}
-                  fgColor="#7C3AED"
-                />
-                <p className="text-gray-600 text-sm mt-4 font-mono">
-                  {permanentUrl}
-                </p>
-              </div>
-
-              <div className="mt-4 flex gap-3">
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 bg-white text-lavender-600 px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
-                >
-                  🖨️ Print QR Code
-                </button>
-                <p className="text-white/75 text-sm self-center">
-                  Print once, use at all your events forever!
-                </p>
-              </div>
-            </div>
-          )}
+          <button
+            onClick={closeEvent}
+            className="px-4 py-2 border-2 border-red-300 text-red-700 rounded-lg font-semibold hover:bg-red-50 transition-colors"
+          >
+            Close Event
+          </button>
         </div>
 
         {/* Stats */}
@@ -296,12 +178,15 @@ function EventDetails() {
 
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-mint-100 rounded-lg">
-                <Palette className="text-mint-600" size={24} />
+              <div className={`p-3 ${theme.bg} rounded-lg`}>
+                <Palette className={theme.text} size={24} />
               </div>
               <div>
                 <p className="text-sm text-gray-600">Color Theme</p>
-                <p className="text-lg font-bold text-gray-900 capitalize">{event.colorTheme}</p>
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full ${theme.accent}`} />
+                  <p className="text-lg font-bold text-gray-900 capitalize">{event.colorTheme}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -313,7 +198,7 @@ function EventDetails() {
             <h2 className="text-2xl font-bold text-gray-900">Queues</h2>
             <button
               onClick={() => navigate(`/event/${eventId}/create-queue`)}
-              className="flex items-center gap-2 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+              className={`flex items-center gap-2 bg-gradient-to-r ${theme.gradient} text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}
             >
               <Plus size={20} />
               Create Queue
@@ -356,15 +241,15 @@ function EventDetails() {
 
                   <div className="space-y-2 text-sm text-gray-600">
                     <div className="flex justify-between">
-                      <span>Current Number:</span>
-                      <span className="font-bold text-lavender-600">#{queue.currentNumber || 0}</span>
+                      <span>Now Serving:</span>
+                      <span className={`font-bold ${theme.text}`}>#{queue.currentNumber || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>In Queue:</span>
+                      <span>Waiting:</span>
                       <span className="font-bold text-softpink-600">{queue.waitingCount || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Total Served:</span>
+                      <span>Completed:</span>
                       <span className="font-bold text-gray-700">{queue.totalServed || 0}</span>
                     </div>
                   </div>
@@ -375,7 +260,7 @@ function EventDetails() {
                         e.stopPropagation();
                         navigate(`/queue/${queue.id}/manage`);
                       }}
-                      className="flex-1 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all"
+                      className={`flex-1 bg-gradient-to-r ${theme.gradient} text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all`}
                     >
                       Manage Queue
                     </button>
@@ -388,26 +273,6 @@ function EventDetails() {
                     </button>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/artistline/kiosk/${eventId}/${queue.id}`, '_blank');
-                      }}
-                      className="py-2 px-3 bg-mint-100 text-mint-700 rounded-lg text-xs font-semibold hover:bg-mint-200 transition-colors"
-                    >
-                      📱 Kiosk Mode
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/artistline/display/${eventId}`, '_blank');
-                      }}
-                      className="py-2 px-3 bg-skyblue-100 text-skyblue-700 rounded-lg text-xs font-semibold hover:bg-skyblue-200 transition-colors"
-                    >
-                      📺 Display
-                    </button>
-                  </div>
                 </div>
               ))}
             </div>
