@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { BuzzMark, Mascot } from '../components/BuzzBrand';
+import { asset } from '../utils/urls';
 import ThemeToggle from './../components/ThemeToggle';
 import {
   QrCode,
@@ -198,7 +199,7 @@ function Landing() {
           <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
             <div className="flex justify-center">
               <img
-                src="/brand/phone-queue.jpg"
+                src={asset("brand/phone-queue.jpg")}
                 alt="A client's phone showing number 23 with a 12 minute wait"
                 className="w-full max-w-[260px] h-auto rounded-2xl"
               />

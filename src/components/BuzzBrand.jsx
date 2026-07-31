@@ -1,4 +1,5 @@
 import Logo from './Logo';
+import { asset } from '../utils/urls';
 
 /** Wordmark lockup — hexagon mark plus the Buzz name */
 export function BuzzMark({ size = 28, className = '', textClass = 'text-xl' }) {
@@ -15,7 +16,7 @@ export function BuzzMark({ size = 28, className = '', textClass = 'text-xl' }) {
  * honey or sage with nothing behind it — no plate, no matched backdrop.
  */
 export function Mascot({ className = '', alt = '' }) {
-  return <img src="/brand/mascot.webp" alt={alt} className={className} />;
+  return <img src={asset("brand/mascot.webp")} alt={alt} className={className} />;
 }
 
 /**

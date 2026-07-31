@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, getDoc } from 'fire
 import toast from 'react-hot-toast';
 import { ShareCard, SharePlaceholder } from '../components/ShareCard';
 import { TONES } from '../utils/shareTones';
+import { appUrl } from '../utils/urls';
 
 function SharePage() {
   const { currentUser } = useAuth();
@@ -112,9 +113,9 @@ function SharePage() {
     ? activeEvents.find(e => e.id === selectedDisplayEvent) || defaultEvent
     : defaultEvent;
 
-  const kioskUrl = artistUsername ? `${window.location.origin}/artist/${artistUsername}?kiosk=1` : '';
-  const clientUrl = clientEvent ? `${window.location.origin}/join/${clientEvent.id}` : '';
-  const displayUrl = displayEvent ? `${window.location.origin}/display/${displayEvent.id}` : '';
+  const kioskUrl = artistUsername ? appUrl(`artist/${artistUsername}?kiosk=1`) : '';
+  const clientUrl = clientEvent ? appUrl(`join/${clientEvent.id}`) : '';
+  const displayUrl = displayEvent ? appUrl(`display/${displayEvent.id}`) : '';
 
   const eventPicker = (tone, current, onPick) =>
     activeEvents.length > 1 ? (

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ROUTER_BASE } from './utils/urls';
 import ProtectedLayout from './components/ProtectedLayout';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -26,7 +27,7 @@ function PublicRoute({ children }) {
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      <Router basename={ROUTER_BASE}>
         <Toaster position="top-center" />
         <Routes>
           {/* Public routes */}
