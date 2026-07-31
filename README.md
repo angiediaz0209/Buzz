@@ -130,7 +130,7 @@ so security depends entirely on Firestore rules, not on hiding this file.
 | --- | --- |
 | `npm run dev` | Dev server with HMR |
 | `npm run build` | Production build for the domain root (Firebase) |
-| `npm run build:gh` | Production build for `/artistline/` + `404.html` (Pages) |
+| `npm run build:gh` | Production build for GitHub Pages + `404.html` |
 | `npm run deploy` | `build:gh` then publish to the `gh-pages` branch |
 | `npm run preview` | Serve the last build locally |
 | `npm run lint` | ESLint |
@@ -276,8 +276,29 @@ through [`src/utils/urls.js`](./src/utils/urls.js):
 | `asset(path)` | files in `public/` |
 | `appUrl(path)` | absolute links for QR codes and copy buttons |
 
-`vite.config.js` reads `base` from `VITE_BASE` (default `/`). Never hardcode a
-leading slash for an asset or a shared link — it will 404 on Pages.
+`vite.config.js` reads `base` from `VITE_BASE` (default `/`), and
+`scripts/build-gh.mjs` derives that value from **`package.json` "homepage"**.
+Never hardcode a leading slash for an asset or a shared link — it will 404 on
+Pages.
+
+### Renaming the repository
+
+A GitHub project site is served from `/<repo-name>/`, so the base path has to
+follow the repo name. Because it's derived, renaming takes one edit:
+
+1. Rename the repo in GitHub → Settings.
+2. Update `homepage` in `package.json` to the new URL.
+3. `git remote set-url origin <new URL>` (GitHub redirects the old one, but
+   don't rely on it).
+4. `npm run deploy` — the new base is picked up automatically.
+
+The Firebase deployment is unaffected: it serves from the domain root and its
+project id (`artistline-v1`) is independent of the repo name.
+
+**QR codes already in the wild:** codes are generated at runtime from the
+current origin, so newly rendered ones are always correct — but anything
+**already printed** with the old Pages URL stops working. Reprint table signs
+after a rename, or point clients at the Firebase URL, which doesn't change.
 
 ### Firebase Hosting
 
@@ -292,7 +313,7 @@ firebase deploy
 npm run deploy
 ```
 
-This builds with `VITE_BASE=/artistline/` and copies `index.html` to `404.html`,
+This derives the base from `homepage`, builds, and copies `index.html` to `404.html`,
 which is how Pages serves an SPA's deep links. Those URLs return HTTP 404 with
 the app in the body — browsers render it fine.
 

@@ -1,11 +1,11 @@
-// The app is served from the domain root on Firebase Hosting but from
-// /artistline/ on GitHub Pages. Vite injects the build's base as BASE_URL
+// The app is served from the domain root on Firebase Hosting but from a
+// /<repo-name>/ subpath on GitHub Pages. Vite injects the build's base as BASE_URL
 // (always with a trailing slash), so everything that needs an absolute path
 // goes through here instead of hardcoding a leading slash.
 
 export const BASE = import.meta.env.BASE_URL;
 
-/** Router basename: '' at the domain root, '/artistline' on GitHub Pages. */
+/** Router basename: '' at the domain root, '/<repo-name>' on GitHub Pages. */
 export const ROUTER_BASE = BASE.replace(/\/$/, '');
 
 /** Path to a file in public/ — e.g. asset('brand/mascot.webp'). */

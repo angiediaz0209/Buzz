@@ -160,7 +160,7 @@ function Auth() {
                   placeholder="your-username"
                 />
                 <p className="text-xs text-stone-500 mt-1">
-                  This will be your permanent link: artistline.com/{username || 'your-username'}
+                  This will be your permanent link: /artist/{username || 'your-username'}
                 </p>
               </div>
             )}
