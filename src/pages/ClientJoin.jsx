@@ -13,9 +13,11 @@ import {
     onSnapshot,
     runTransaction
   } from 'firebase/firestore';
-import { Users, ArrowLeft, CheckCircle } from 'lucide-react';
+import { Users, ArrowLeft, CheckCircle, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
+import TurnChoice from '../components/TurnChoice';
+import { Mascot } from '../components/BuzzBrand';
 
 function ClientJoin() {
   const { eventId } = useParams();
@@ -24,11 +26,15 @@ function ClientJoin() {
   
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
-  const [selectedQueue, setSelectedQueue] = useState(null);
+  // Clients may take a number in several lines at once
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [linesConfirmed, setLinesConfirmed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(null); // { number, customerDocId }
-  const [artistUsername, setArtistUsername] = useState(null);
+  const [success, setSuccess] = useState(null); // { turns: [{ id, number, queueName }] }
+  // Arrivals from the kiosk/artist page already picked "Get a turn" there;
+  // a direct QR scan hasn't been asked yet.
+  const [askedChoice, setAskedChoice] = useState(!!location.state?.artistUsername);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -50,12 +56,6 @@ function ClientJoin() {
         
         const eventData = { id: eventDoc.id, ...eventDoc.data() };
         setEvent(eventData);
-
-        // Look up artist username for back navigation
-        const artistDoc = await getDoc(doc(db, 'artists', eventData.artistId));
-        if (artistDoc.exists() && artistDoc.data().username) {
-          setArtistUsername(artistDoc.data().username);
-        }
 
         // Load visible queues
         const queuesRef = collection(db, 'queues');
@@ -105,49 +105,56 @@ function ClientJoin() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const queue = queues.length === 1 ? queues[0] : selectedQueue;
-    if (!queue) {
-      toast.error('Please select a queue');
+
+    const chosen = chosenQueues;
+    if (chosen.length === 0) {
+      toast.error('Please choose at least one line');
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const nextNumber = await getNextNumber(queue.id);
+      // Ties this person's turns together so their status page can show them all
+      const joinGroupId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const turns = [];
 
-      const customerData = {
-        queueId: queue.id,
-        eventId: eventId,
-        number: nextNumber,
-        name: formData.name,
-        phone: formData.phone,
-        status: 'waiting',
-        response: null,
-        joinedAt: serverTimestamp()
-      };
+      for (const queue of chosen) {
+        const nextNumber = await getNextNumber(queue.id);
 
-      const docRef = await addDoc(collection(db, 'customers'), customerData);
+        const docRef = await addDoc(collection(db, 'customers'), {
+          queueId: queue.id,
+          eventId: eventId,
+          number: nextNumber,
+          name: formData.name,
+          phone: formData.phone,
+          status: 'waiting',
+          response: null,
+          joinGroupId,
+          joinedAt: serverTimestamp()
+        });
 
-      // Update queue waiting count
-      await updateDoc(doc(db, 'queues', queue.id), {
-        waitingCount: (queue.waitingCount || 0) + 1
-      });
+        await updateDoc(doc(db, 'queues', queue.id), {
+          waitingCount: (queue.waitingCount || 0) + 1
+        });
+
+        turns.push({ id: docRef.id, number: nextNumber, queueName: queue.name });
+      }
 
       // Update event total customers
       await updateDoc(doc(db, 'events', eventId), {
-        totalCustomers: (event.totalCustomers || 0) + 1
+        totalCustomers: (event.totalCustomers || 0) + chosen.length
       });
 
-      setSuccess({ number: nextNumber, customerDocId: docRef.id });
+      setSuccess({ turns });
+      const docRef = { id: turns[0].id };
 
-      // Auto-redirect back to choice screen after 3 seconds
-      const fromArtist = location.state?.artistUsername;
+      // Kiosk mode (came from ArtistProfile with kiosk flag): redirect back after 3s
+      // Phone mode (direct link): go to CustomerView to track turn
+      const isKiosk = !!location.state?.kiosk;
       setTimeout(() => {
-        if (fromArtist) {
-          navigate(`/artist/${fromArtist}`, { state: { returnToChoice: true } });
-        } else if (artistUsername) {
-          navigate(`/artist/${artistUsername}`, { state: { returnToChoice: true } });
+        if (isKiosk) {
+          navigate(`/artist/${location.state.artistUsername}?kiosk=1`, { state: { returnToChoice: true } });
         } else {
           navigate(`/customer/${docRef.id}`);
         }
@@ -164,10 +171,10 @@ function ClientJoin() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-lavender-600"></div>
-          <p className="mt-4 text-gray-600">Loading event...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-honey-500"></div>
+          <p className="mt-4 text-stone-600">Loading event...</p>
         </div>
       </div>
     );
@@ -175,10 +182,10 @@ function ClientJoin() {
 
   if (!event) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center p-4">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Not Found</h1>
-          <p className="text-gray-600">This event may have been closed or removed.</p>
+          <h1 className="text-2xl font-bold text-ink-900 mb-2">Event Not Found</h1>
+          <p className="text-stone-600">This event may have been closed or removed.</p>
         </div>
       </div>
     );
@@ -186,40 +193,86 @@ function ClientJoin() {
 
   const theme = getTheme(event.colorTheme);
 
+  // Choice screen — only for people who landed here directly
+  if (!askedChoice && !success) {
+    return (
+      <TurnChoice
+        title={event.name}
+        subtitle="What would you like to do?"
+        onGetTurn={() => setAskedChoice(true)}
+        onFindTurn={() => navigate(`/event/${eventId}/find`, {
+          state: { returnTo: `/join/${eventId}` }
+        })}
+      />
+    );
+  }
+
   // Success screen — shown for 3 seconds after joining
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
-        <CheckCircle size={80} className="text-green-400 mb-6" />
-        <h1 className="text-6xl sm:text-8xl font-bold text-white mb-4">
-          #{success.number}
-        </h1>
-        <p className="text-2xl text-white/80 font-medium">You're in line!</p>
-        <p className="text-white/50 mt-4 text-sm">Redirecting...</p>
+      <div className="min-h-screen bg-cream-100 flex flex-col items-center justify-center p-6 text-center">
+        <CheckCircle size={56} className="text-sage-500 mb-4" />
+
+        {success.turns.length === 1 ? (
+          <>
+            <p className="text-stone-600 text-lg">Your number is</p>
+            <h1 className="text-7xl sm:text-8xl font-black text-sage-400 my-2">
+              {success.turns[0].number}
+            </h1>
+          </>
+        ) : (
+          <>
+            <p className="text-stone-600 text-lg mb-4">
+              You&apos;re in {success.turns.length} lines
+            </p>
+            <div className="w-full max-w-xs space-y-3">
+              {success.turns.map(turn => (
+                <div
+                  key={turn.id}
+                  className="bg-white rounded-2xl px-5 py-4 flex items-center justify-between gap-4 shadow-sm"
+                >
+                  <span className="font-bold text-ink-900 truncate">{turn.queueName}</span>
+                  <span className="text-3xl font-black text-sage-400 shrink-0">
+                    {turn.number}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <p className="text-2xl text-ink-900 font-extrabold mt-4">You&apos;re in line!</p>
+        <Mascot className="w-28 h-auto mt-4" />
       </div>
     );
   }
 
-  // Auto-select if single queue
-  const activeQueue = queues.length === 1 ? queues[0] : selectedQueue;
+  // One line means there's nothing to choose
+  const chosenQueues =
+    queues.length === 1 ? queues : queues.filter(q => selectedIds.includes(q.id));
+  const showForm = queues.length === 1 || linesConfirmed;
+
+  const toggleQueue = (id) =>
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
 
   const handleBack = () => {
-    const fromArtist = location.state?.artistUsername;
-    if (fromArtist) {
-      navigate(`/artist/${fromArtist}`, { state: { returnToChoice: true } });
+    if (location.state?.kiosk && location.state?.artistUsername) {
+      navigate(`/artist/${location.state.artistUsername}`, { state: { returnToChoice: true } });
     } else {
       navigate(-1);
     }
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} pb-10`}>
+    <div className={`min-h-screen bg-cream-100 pb-10`}>
       {/* Header with back button */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-cream-200">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
           <button
             onClick={handleBack}
-            className="text-gray-600 hover:text-gray-900 transition-colors"
+            className="text-stone-600 hover:text-ink-900 transition-colors"
           >
             <ArrowLeft size={22} />
           </button>
@@ -230,45 +283,97 @@ function ClientJoin() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* Queue Selection (only when multiple queues) */}
-        {!activeQueue ? (
+        {/* Line selection — pick one, or several to hold a spot in each */}
+        {!showForm ? (
           <div className="space-y-4">
             {queues.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                <p className="text-gray-600">No queues available at this time.</p>
+                <p className="text-stone-600">No lines are open at the moment.</p>
               </div>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4">Choose a Queue</h2>
-                {queues.map((queue) => (
-                  <button
-                    key={queue.id}
-                    onClick={() => setSelectedQueue(queue)}
-                    className={`w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all text-left border-2 border-transparent ${theme.hoverBorder}`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">
-                          {queue.name}
-                        </h3>
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Users size={16} />
-                          <span>{queue.waitingCount || 0} people waiting</span>
+                <div className="mb-5">
+                  <h2 className="text-2xl font-extrabold text-ink-900">Which line?</h2>
+                  <p className="text-stone-600 mt-1">
+                    Pick one, or choose several to get a number in each.
+                  </p>
+                </div>
+
+                {queues.map((queue) => {
+                  const picked = selectedIds.includes(queue.id);
+                  return (
+                    <button
+                      key={queue.id}
+                      onClick={() => toggleQueue(queue.id)}
+                      aria-pressed={picked}
+                      className={`w-full rounded-2xl p-5 text-left transition-colors border-[3px] ${
+                        picked
+                          ? 'bg-honey-100 border-honey-500'
+                          : 'bg-white border-cream-300 hover:border-honey-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <span
+                          className={`w-8 h-8 rounded-xl shrink-0 flex items-center justify-center border-2 ${
+                            picked
+                              ? 'bg-honey-500 border-honey-500'
+                              : 'bg-white border-stone-300'
+                          }`}
+                        >
+                          {picked && <Check size={20} className="text-ink-900" strokeWidth={3} />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-xl font-extrabold text-ink-900 truncate">
+                            {queue.name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-sm text-stone-600 mt-0.5">
+                            <Users size={16} />
+                            <span>
+                              {queue.waitingCount || 0}{' '}
+                              {(queue.waitingCount || 0) === 1 ? 'person' : 'people'} waiting
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <span className={`text-sm font-semibold ${theme.text}`}>Join →</span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
+
+                <button
+                  onClick={() => setLinesConfirmed(true)}
+                  disabled={selectedIds.length === 0}
+                  className="w-full bg-honey-500 text-ink-900 py-4 rounded-2xl font-extrabold text-lg shadow-lg hover:bg-honey-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {selectedIds.length === 0
+                    ? 'Choose a line to continue'
+                    : selectedIds.length === 1
+                    ? 'Continue'
+                    : `Continue with ${selectedIds.length} lines`}
+                </button>
               </>
             )}
           </div>
         ) : (
-          /* Join Form — just name + phone */
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          /* Join form — one name and phone covers every chosen line */
+          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+            {queues.length > 1 && (
+              <div className="mb-5 pb-5 border-b border-cream-200">
+                <p className="text-sm text-stone-600 mb-1">Getting a number in</p>
+                <p className="font-extrabold text-ink-900">
+                  {chosenQueues.map(q => q.name).join(' · ')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setLinesConfirmed(false)}
+                  className="text-sm font-bold text-honey-700 hover:text-ink-900 transition-colors mt-1"
+                >
+                  Change lines
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-ink-700 mb-2">
                   Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -277,13 +382,13 @@ function ClientJoin() {
                   value={formData.name}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors text-lg"
+                  className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors text-lg"
                   placeholder="Enter your name"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-ink-700 mb-2">
                   Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -292,7 +397,7 @@ function ClientJoin() {
                   value={formData.phone}
                   onChange={handleChange}
                   required
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors text-lg"
+                  className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors text-lg"
                   placeholder="555-0123"
                 />
               </div>
@@ -300,9 +405,9 @@ function ClientJoin() {
               <button
                 type="submit"
                 disabled={submitting}
-                className={`w-full bg-gradient-to-r ${theme.gradient} text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
+                className={`w-full bg-honey-500 text-ink-900 py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
               >
-                {submitting ? 'Joining...' : 'Get My Turn'}
+                {submitting ? 'Joining...' : chosenQueues.length > 1 ? `Get my ${chosenQueues.length} numbers` : 'Get my turn'}
               </button>
             </form>
           </div>

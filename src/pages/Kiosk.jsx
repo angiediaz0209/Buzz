@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import TurnChoice from '../components/TurnChoice';
+import { Mascot } from '../components/BuzzBrand';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
 import {
   doc,
@@ -7,13 +9,13 @@ import {
   collection,
   query,
   where,
-  getDocs,
   addDoc,
   updateDoc,
   serverTimestamp,
   onSnapshot,
   runTransaction
 } from 'firebase/firestore';
+import { Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
 
@@ -21,15 +23,18 @@ const RESET_SECONDS = 10;
 
 function Kiosk() {
   const { eventId, queueId } = useParams();
+  const navigate = useNavigate();
 
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
-  const [selectedQueue, setSelectedQueue] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [step, setStep] = useState('select'); // select | form | success
+  const [step, setStep] = useState('choice'); // choice | select | form | success
   const [countdown, setCountdown] = useState(RESET_SECONDS);
   const [assignedNumber, setAssignedNumber] = useState(null);
+  // Kiosk users can take a number in several lines in one go
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [assignedTurns, setAssignedTurns] = useState([]);
 
   const [formData, setFormData] = useState({
     childName: '',
@@ -58,8 +63,6 @@ function Kiosk() {
           if (queueDoc.exists()) {
             const queueData = { id: queueDoc.id, ...queueDoc.data() };
             setQueues([queueData]);
-            setSelectedQueue(queueData);
-            setStep('form');
           }
         } else {
           // Load all visible queues
@@ -77,13 +80,6 @@ function Kiosk() {
               ...doc.data()
             }));
             setQueues(queuesData);
-
-            // If only one queue, auto-select it
-            if (queuesData.length === 1) {
-              setSelectedQueue(queuesData[0]);
-              setStep('form');
-            }
-
             setLoading(false);
           });
 
@@ -128,15 +124,11 @@ function Kiosk() {
       isChild: true
     });
     setAssignedNumber(null);
+    setAssignedTurns([]);
+    setSelectedIds([]);
 
-    // If specific queue, go back to form
-    // If multiple queues, go back to selection
-    if (queueId || queues.length === 1) {
-      setStep('form');
-    } else {
-      setSelectedQueue(null);
-      setStep('select');
-    }
+    // Back to the two-option screen — the kiosk's resting state
+    setStep('choice');
   };
 
   const getNextNumber = async (queueId) => {
@@ -151,30 +143,43 @@ function Kiosk() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedQueue) return;
-  
+
+    const chosen = chosenQueues;
+    if (chosen.length === 0) return;
+
     setSubmitting(true);
-  
+
     try {
-      const nextNumber = await getNextNumber(selectedQueue.id);
-  
-      const customerData = {
-        queueId: selectedQueue.id,
-        eventId,
-        number: nextNumber,
-        childName: formData.isChild ? formData.childName : '',
-        parentName: formData.parentName || '',
-        isChild: formData.isChild,
-        phone: formData.phone || '',
-        email: '',
-        notificationMethod: 'screen',
-        status: 'waiting',
-        response: null,
-        joinedAt: serverTimestamp(),
-        isKiosk: true
-      };
-  
-      await addDoc(collection(db, 'customers'), customerData);
+      // Links this person's turns so their status page can show them together
+      const joinGroupId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const turns = [];
+
+      for (const queue of chosen) {
+        const nextNumber = await getNextNumber(queue.id);
+
+        await addDoc(collection(db, 'customers'), {
+          queueId: queue.id,
+          eventId,
+          number: nextNumber,
+          childName: formData.isChild ? formData.childName : '',
+          parentName: formData.parentName || '',
+          isChild: formData.isChild,
+          phone: formData.phone || '',
+          email: '',
+          notificationMethod: 'screen',
+          status: 'waiting',
+          response: null,
+          joinGroupId,
+          joinedAt: serverTimestamp(),
+          isKiosk: true
+        });
+
+        await updateDoc(doc(db, 'queues', queue.id), {
+          waitingCount: (queue.waitingCount || 0) + 1
+        });
+
+        turns.push({ number: nextNumber, queueName: queue.name });
+      }
   
       // Save to contacts if consent given
       if (formData.marketingConsent && formData.phone) {
@@ -186,22 +191,18 @@ function Kiosk() {
           eventId: eventId,
           eventType: event.eventType || 'other',
           consentDate: serverTimestamp(),
-          consentText: "Yes! Notify me about future events from this artist and ArtistLine.",
+          consentText: "Yes! Notify me about future events from this artist and Buzz.",
           source: 'kiosk'
         });
       }
   
-      // Update queue waiting count
-      await updateDoc(doc(db, 'queues', selectedQueue.id), {
-        waitingCount: (selectedQueue.waitingCount || 0) + 1
-      });
-  
       // Update event total customers
       await updateDoc(doc(db, 'events', eventId), {
-        totalCustomers: (event.totalCustomers || 0) + 1
+        totalCustomers: (event.totalCustomers || 0) + chosen.length
       });
-  
-      setAssignedNumber(nextNumber);
+
+      setAssignedTurns(turns);
+      setAssignedNumber(turns[0].number);
       setStep('success');
   
     } catch (error) {
@@ -217,12 +218,23 @@ function Kiosk() {
     setFormData({ ...formData, [e.target.name]: value });
   };
 
+  // One line (or a pinned queueId) means there's nothing to choose
+  const chosenQueues =
+    queueId || queues.length === 1
+      ? queues
+      : queues.filter(q => selectedIds.includes(q.id));
+
+  const toggleQueue = (id) =>
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-lavender-600"></div>
-          <p className="mt-4 text-2xl text-gray-600">Loading...</p>
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-honey-500"></div>
+          <p className="mt-4 text-2xl text-stone-600">Loading...</p>
         </div>
       </div>
     );
@@ -233,90 +245,156 @@ function Kiosk() {
   // SUCCESS SCREEN
   if (step === 'success') {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${theme.gradient} flex items-center justify-center p-8`}>
-        <div className="text-center text-white">
-          <div className="text-8xl mb-6">🎉</div>
-          <h1 className="text-4xl font-bold mb-4">You're In!</h1>
-          <p className="text-2xl mb-8 opacity-90">Your number is:</p>
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center p-4 sm:p-8">
+        <div className="text-center w-full max-w-xl">
+          <Mascot className="w-28 sm:w-36 h-auto mx-auto mb-2" />
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-ink-900 mb-4 sm:mb-6">You&apos;re in!</h1>
 
-          {/* Big Number */}
-          <div className="bg-white rounded-3xl p-12 mb-8 shadow-2xl inline-block">
-            <div className={`text-9xl font-bold ${theme.text}`}>
-              #{assignedNumber}
-            </div>
-          </div>
+          {assignedTurns.length <= 1 ? (
+            <>
+              <p className="text-xl text-stone-600 mb-2">Your number is</p>
+              <div className="text-[5rem] sm:text-[7rem] leading-none font-black text-sage-400 mb-4">
+                {assignedNumber}
+              </div>
+              {assignedTurns[0] && (
+                <p className="text-xl text-ink-900 font-bold mb-6">
+                  {assignedTurns[0].queueName}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="text-xl text-stone-600 mb-4">
+                You have {assignedTurns.length} numbers
+              </p>
+              <div className="space-y-3 mb-6">
+                {assignedTurns.map(turn => (
+                  <div
+                    key={turn.queueName}
+                    className="bg-white rounded-2xl px-6 py-4 flex items-center justify-between gap-4 shadow-sm"
+                  >
+                    <span className="text-xl font-extrabold text-ink-900 truncate">
+                      {turn.queueName}
+                    </span>
+                    <span className="text-4xl font-black text-sage-400 shrink-0">
+                      {turn.number}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
-          <p className="text-xl mb-4 opacity-90">
-            Queue: <strong>{selectedQueue?.name}</strong>
+          <p className="text-lg text-stone-600 mb-8">
+            Watch the display screen for your number.
           </p>
 
-          <p className="text-lg opacity-75 mb-8">
-            Watch the display screen for your number!
-          </p>
-
-          {/* Countdown */}
-          <div className="bg-white/20 rounded-2xl p-6">
-            <p className="text-lg opacity-90 mb-2">
-              Next customer in:
-            </p>
-            <div className="text-6xl font-bold">
-              {countdown}
-            </div>
-            <p className="text-sm opacity-75 mt-2">seconds</p>
+          <div className="bg-white rounded-2xl p-6 border-2 border-cream-300">
+            <p className="text-stone-600 mb-1">Next person in</p>
+            <div className="text-5xl font-black text-ink-900">{countdown}</div>
           </div>
 
-          {/* Manual reset button */}
           <button
             onClick={handleReset}
-            className={`mt-8 bg-white ${theme.text} px-8 py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-all`}
+            className="mt-8 bg-honey-500 text-ink-900 px-8 py-4 rounded-2xl font-extrabold text-lg hover:bg-honey-600 transition-colors shadow-lg"
           >
-            Next Customer →
+            Next person →
           </button>
         </div>
       </div>
     );
   }
 
+  // CHOICE SCREEN — the kiosk's resting state
+  if (step === 'choice') {
+    return (
+      <TurnChoice
+        title={event?.name}
+        subtitle="What would you like to do?"
+        onGetTurn={() => setStep(queueId || queues.length === 1 ? 'form' : 'select')}
+        onFindTurn={() => navigate(`/event/${eventId}/find`, {
+          state: { returnTo: `/kiosk/${eventId}` }
+        })}
+      />
+    );
+  }
+
   // QUEUE SELECTION SCREEN
   if (step === 'select') {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-8`}>
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center p-4 sm:p-8">
         <div className="w-full max-w-2xl">
-          <div className="text-center mb-10">
-            <h1 className={`text-5xl font-bold ${theme.text} mb-2`}>
-              🎨 Welcome!
+          <div className="text-center mb-6 sm:mb-10">
+            <h1 className="text-3xl sm:text-5xl font-extrabold text-ink-900 mb-2">
+              Choose a line
             </h1>
-            <p className="text-2xl text-gray-600">Choose your queue</p>
+            <p className="text-base sm:text-2xl text-stone-600">
+              Tap one, or several to get a number in each
+            </p>
           </div>
 
           <div className="space-y-4">
-            {queues.map((queue) => (
-              <button
-                key={queue.id}
-                onClick={() => {
-                  setSelectedQueue(queue);
-                  setStep('form');
-                }}
-                className={`w-full bg-white rounded-2xl shadow-lg p-8 hover:shadow-xl transition-all text-left border-2 border-transparent ${theme.hoverBorder}`}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                      {queue.name}
-                    </h2>
-                    <p className="text-xl text-gray-600">
-                      {queue.waitingCount || 0} people waiting
-                    </p>
+            {queues.map((queue) => {
+              const picked = selectedIds.includes(queue.id);
+              return (
+                <button
+                  key={queue.id}
+                  onClick={() => toggleQueue(queue.id)}
+                  aria-pressed={picked}
+                  className={`w-full rounded-2xl p-4 sm:p-8 text-left transition-colors border-[3px] ${
+                    picked
+                      ? 'bg-honey-100 border-honey-500'
+                      : 'bg-white border-cream-300 hover:border-honey-400'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 sm:gap-5">
+                    <span
+                      className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl shrink-0 flex items-center justify-center border-[3px] ${
+                        picked ? 'bg-honey-500 border-honey-500' : 'bg-white border-stone-300'
+                      }`}
+                    >
+                      {picked && (
+                        <Check className="text-ink-900 w-6 h-6 sm:w-7 sm:h-7" strokeWidth={3} />
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-xl sm:text-3xl font-extrabold text-ink-900 leading-tight">
+                        {queue.name}
+                      </h2>
+                      <p className="text-sm sm:text-xl text-stone-600 mt-0.5 sm:mt-1">
+                        {queue.waitingCount || 0}{' '}
+                        {(queue.waitingCount || 0) === 1 ? 'person' : 'people'} waiting
+                        {/* On phones the separate column below is hidden, so show it here */}
+                        <span className="sm:hidden">
+                          {' · now serving '}
+                          {queue.currentNumber || '—'}
+                        </span>
+                      </p>
+                    </div>
+
+                    <div className="hidden sm:block text-right shrink-0">
+                      <p className="text-stone-500 text-base">Now serving</p>
+                      <p className="text-5xl font-black text-sage-400">
+                        {queue.currentNumber || '—'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-gray-500 text-lg">Now serving</p>
-                    <p className={`text-5xl font-bold ${theme.text}`}>
-                      #{queue.currentNumber || 0}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              );
+            })}
+
+            <button
+              onClick={() => setStep('form')}
+              disabled={selectedIds.length === 0}
+              className="w-full bg-honey-500 text-ink-900 py-4 sm:py-5 rounded-2xl font-extrabold text-lg sm:text-2xl shadow-lg hover:bg-honey-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {selectedIds.length === 0
+                ? 'Tap a line to continue'
+                : selectedIds.length === 1
+                ? 'Continue'
+                : `Continue with ${selectedIds.length} lines`}
+            </button>
           </div>
         </div>
       </div>
@@ -325,20 +403,20 @@ function Kiosk() {
 
   // FORM SCREEN
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-8`}>
+    <div className="min-h-screen bg-cream-100 flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <h1 className={`text-4xl font-bold ${theme.text} mb-2`}>
-            🎨 Join {selectedQueue?.name}
+        <div className="text-center mb-5 sm:mb-8">
+          <h1 className={`text-2xl sm:text-4xl font-extrabold ${theme.text} mb-2`}>
+            Join {chosenQueues.map(q => q.name).join(' + ') || 'the line'}
           </h1>
-          <p className="text-xl text-gray-600">Enter your info below</p>
+          <p className="text-base sm:text-xl text-stone-600">Enter your info below</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-8">
+          <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
             {/* Name */}
             <div>
-              <label className="block text-xl font-medium text-gray-700 mb-3">
+              <label className="block text-base sm:text-xl font-semibold text-ink-700 mb-2 sm:mb-3">
                 Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -347,22 +425,22 @@ function Kiosk() {
                 value={formData.childName}
                 onChange={handleChange}
                 required
-                className="w-full px-6 py-4 text-xl border-2 border-gray-200 rounded-xl focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 sm:px-6 py-3.5 sm:py-4 text-lg sm:text-xl border-2 border-cream-200 rounded-xl focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="Enter name"
               />
             </div>
 
             {/* Is Child */}
-            <div className="bg-lavender-50 rounded-xl p-5 border-2 border-lavender-200">
+            <div className="bg-cream-50 rounded-xl p-5 border-2 border-cream-300">
               <label className="flex items-center gap-4 cursor-pointer">
                 <input
                   type="checkbox"
                   name="isChild"
                   checked={formData.isChild}
                   onChange={handleChange}
-                  className="w-7 h-7 text-lavender-600 border-gray-300 rounded"
+                  className="w-6 h-6 sm:w-7 sm:h-7 shrink-0 accent-honey-500 rounded"
                 />
-                <span className="text-xl font-medium text-gray-900">
+                <span className="text-base sm:text-xl font-semibold text-ink-900">
                   This is a child's name
                 </span>
               </label>
@@ -371,7 +449,7 @@ function Kiosk() {
             {/* Parent Name */}
             {formData.isChild && (
               <div>
-                <label className="block text-xl font-medium text-gray-700 mb-3">
+                <label className="block text-base sm:text-xl font-semibold text-ink-700 mb-2 sm:mb-3">
                   Parent/Guardian Name
                 </label>
                 <input
@@ -379,7 +457,7 @@ function Kiosk() {
                   name="parentName"
                   value={formData.parentName}
                   onChange={handleChange}
-                  className="w-full px-6 py-4 text-xl border-2 border-gray-200 rounded-xl focus:border-lavender-500 focus:outline-none transition-colors"
+                  className="w-full px-4 sm:px-6 py-3.5 sm:py-4 text-lg sm:text-xl border-2 border-cream-200 rounded-xl focus:border-honey-500 focus:outline-none transition-colors"
                   placeholder="Parent's name (optional)"
                 />
               </div>
@@ -387,7 +465,7 @@ function Kiosk() {
 
             {/* Phone */}
             <div>
-              <label className="block text-xl font-medium text-gray-700 mb-3">
+              <label className="block text-base sm:text-xl font-semibold text-ink-700 mb-2 sm:mb-3">
                 Phone Number (Optional)
               </label>
               <input
@@ -395,27 +473,27 @@ function Kiosk() {
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                className="w-full px-6 py-4 text-xl border-2 border-gray-200 rounded-xl focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 sm:px-6 py-3.5 sm:py-4 text-lg sm:text-xl border-2 border-cream-200 rounded-xl focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="For notifications (optional)"
               />
             </div>
 
 
             {/* Marketing Consent */}
-            <div className="bg-gradient-to-r from-lavender-50 to-softpink-50 rounded-xl p-5 border-2 border-lavender-200">
+            <div className="bg-cream-50 rounded-xl p-5 border-2 border-cream-300">
             <label className="flex items-start gap-4 cursor-pointer">
                 <input
                 type="checkbox"
                 name="marketingConsent"
                 checked={formData.marketingConsent}
                 onChange={handleChange}
-                className="mt-1 w-7 h-7 text-lavender-600 border-gray-300 rounded"
+                className="mt-1 w-6 h-6 sm:w-7 sm:h-7 shrink-0 accent-honey-500 rounded"
                 />
                 <div>
-                <p className="text-xl font-semibold text-gray-900">
-                    🎁 Hear about future events!
+                <p className="text-xl font-semibold text-ink-900">
+                    Hear about future events!
                 </p>
-                <p className="text-base text-gray-600 mt-1">
+                <p className="text-base text-stone-600 mt-1">
                     Get notified about upcoming events near you.
                     We never spam. Unsubscribe anytime.
                 </p>
@@ -427,9 +505,9 @@ function Kiosk() {
             <button
               type="submit"
               disabled={submitting}
-              className={`w-full bg-gradient-to-r ${theme.gradient} text-white py-6 rounded-xl font-bold text-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
+              className={`w-full bg-honey-500 text-ink-900 py-6 rounded-xl font-bold text-2xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50`}
             >
-              {submitting ? 'Joining...' : 'Get My Number! 🎨'}
+              {submitting ? 'Joining...' : chosenQueues.length > 1 ? `Get my ${chosenQueues.length} numbers` : 'Get my number'}
             </button>
           </form>
         </div>
@@ -438,10 +516,9 @@ function Kiosk() {
         {queues.length > 1 && (
           <button
             onClick={() => {
-              setSelectedQueue(null);
               setStep('select');
             }}
-            className="w-full mt-4 py-4 text-gray-600 font-medium text-lg"
+            className="w-full mt-4 py-4 text-stone-600 font-medium text-lg"
           >
             ← Choose Different Queue
           </button>

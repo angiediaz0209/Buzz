@@ -1,74 +1,78 @@
-// Maps colorTheme values to Tailwind classes
-// All class names must be written in full for Tailwind's purge to detect them
+// Per-event accent themes, all drawn from the Buzz palette so every event
+// still looks like the same app.
+// All class names must be written in full for Tailwind's purge to detect them.
 
 const themes = {
-  lavender: {
-    gradient: 'from-lavender-500 to-softpink-500',
-    gradientBg: 'from-lavender-50 to-softpink-50',
-    border: 'border-lavender-400',
-    text: 'text-lavender-600',
-    bg: 'bg-lavender-100',
-    accent: 'bg-lavender-500',
-    hoverBorder: 'hover:border-lavender-300',
-    dot: 'bg-lavender-600',
-    buttonBg: 'bg-lavender-500',
-    focusBorder: 'focus:border-lavender-500',
-    spinner: 'border-lavender-600',
+  honey: {
+    gradient: 'from-honey-400 to-honey-500',
+    gradientBg: 'from-cream-100 to-cream-200',
+    border: 'border-honey-400',
+    text: 'text-honey-700',
+    bg: 'bg-honey-100',
+    accent: 'bg-honey-500',
+    hoverBorder: 'hover:border-honey-400',
+    dot: 'bg-honey-500',
+    buttonBg: 'bg-honey-500',
+    focusBorder: 'focus:border-honey-500',
+    spinner: 'border-honey-500',
   },
-  mint: {
-    gradient: 'from-mint-500 to-mint-600',
-    gradientBg: 'from-mint-50 to-mint-100',
-    border: 'border-mint-400',
-    text: 'text-mint-600',
-    bg: 'bg-mint-100',
-    accent: 'bg-mint-500',
-    hoverBorder: 'hover:border-mint-300',
-    dot: 'bg-mint-600',
-    buttonBg: 'bg-mint-500',
-    focusBorder: 'focus:border-mint-500',
-    spinner: 'border-mint-600',
+  sage: {
+    gradient: 'from-sage-300 to-sage-500',
+    gradientBg: 'from-cream-100 to-sage-100',
+    border: 'border-sage-400',
+    text: 'text-sage-600',
+    bg: 'bg-sage-100',
+    accent: 'bg-sage-400',
+    hoverBorder: 'hover:border-sage-400',
+    dot: 'bg-sage-500',
+    buttonBg: 'bg-sage-400',
+    focusBorder: 'focus:border-sage-400',
+    spinner: 'border-sage-500',
   },
-  softpink: {
-    gradient: 'from-softpink-500 to-softpink-600',
-    gradientBg: 'from-softpink-50 to-softpink-100',
-    border: 'border-softpink-400',
-    text: 'text-softpink-600',
-    bg: 'bg-softpink-100',
-    accent: 'bg-softpink-500',
-    hoverBorder: 'hover:border-softpink-300',
-    dot: 'bg-softpink-600',
-    buttonBg: 'bg-softpink-500',
-    focusBorder: 'focus:border-softpink-500',
-    spinner: 'border-softpink-600',
+  ink: {
+    gradient: 'from-ink-700 to-ink-900',
+    gradientBg: 'from-cream-100 to-stone-200',
+    border: 'border-ink-700',
+    text: 'text-ink-900',
+    bg: 'bg-stone-200',
+    accent: 'bg-ink-800',
+    hoverBorder: 'hover:border-ink-500',
+    dot: 'bg-ink-800',
+    buttonBg: 'bg-ink-900',
+    focusBorder: 'focus:border-ink-700',
+    spinner: 'border-ink-800',
   },
-  peach: {
-    gradient: 'from-peach-400 to-peach-500',
-    gradientBg: 'from-peach-50 to-peach-100',
-    border: 'border-peach-400',
-    text: 'text-peach-600',
-    bg: 'bg-peach-100',
-    accent: 'bg-peach-500',
-    hoverBorder: 'hover:border-peach-300',
-    dot: 'bg-peach-600',
-    buttonBg: 'bg-peach-500',
-    focusBorder: 'focus:border-peach-500',
-    spinner: 'border-peach-600',
-  },
-  skyblue: {
-    gradient: 'from-skyblue-400 to-skyblue-500',
-    gradientBg: 'from-skyblue-50 to-skyblue-100',
-    border: 'border-skyblue-400',
-    text: 'text-skyblue-600',
-    bg: 'bg-skyblue-100',
-    accent: 'bg-skyblue-500',
-    hoverBorder: 'hover:border-skyblue-300',
-    dot: 'bg-skyblue-600',
-    buttonBg: 'bg-skyblue-500',
-    focusBorder: 'focus:border-skyblue-500',
-    spinner: 'border-skyblue-600',
+  stone: {
+    gradient: 'from-stone-300 to-stone-500',
+    gradientBg: 'from-cream-100 to-stone-200',
+    border: 'border-stone-400',
+    text: 'text-stone-600',
+    bg: 'bg-stone-200',
+    accent: 'bg-stone-500',
+    hoverBorder: 'hover:border-stone-400',
+    dot: 'bg-stone-500',
+    buttonBg: 'bg-stone-500',
+    focusBorder: 'focus:border-stone-400',
+    spinner: 'border-stone-500',
   },
 };
 
+// Events created before the rebrand still store the old palette names.
+const LEGACY = {
+  lavender: 'honey',
+  peach: 'honey',
+  softpink: 'sage',
+  mint: 'sage',
+  skyblue: 'ink',
+};
+
+export const THEME_OPTIONS = [
+  { value: 'honey', label: 'Honey', color: 'bg-honey-500' },
+  { value: 'sage', label: 'Sage', color: 'bg-sage-400' },
+  { value: 'ink', label: 'Ink', color: 'bg-ink-800' },
+  { value: 'stone', label: 'Stone', color: 'bg-stone-500' },
+];
+
 export function getTheme(colorTheme) {
-  return themes[colorTheme] || themes.lavender;
+  return themes[colorTheme] || themes[LEGACY[colorTheme]] || themes.honey;
 }

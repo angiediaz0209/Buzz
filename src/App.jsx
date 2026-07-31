@@ -14,6 +14,8 @@ import CustomerView from './pages/CustomerView';
 import DisplayScreen from './pages/DisplayScreen';
 import FindTurn from './pages/FindTurn';
 import Kiosk from './pages/Kiosk';
+import SharePage from './pages/SharePage';
+import Landing from './pages/Landing';
 
 // Public Route (redirect if logged in)
 function PublicRoute({ children }) {
@@ -35,7 +37,8 @@ function App() {
           <Route path="/customer/:customerId" element={<CustomerView />} />
           <Route path="/artist/:username" element={<ArtistProfile />} />
           <Route path="/join/:eventId" element={<ClientJoin />} />
-          <Route path="/" element={
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={
             <PublicRoute>
               <Auth />
             </PublicRoute>
@@ -45,6 +48,11 @@ function App() {
           <Route path="/dashboard" element={
             <ProtectedLayout>
               <Dashboard />
+            </ProtectedLayout>
+          } />
+          <Route path="/share" element={
+            <ProtectedLayout>
+              <SharePage />
             </ProtectedLayout>
           } />
           <Route path="/create-event" element={

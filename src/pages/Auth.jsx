@@ -70,7 +70,7 @@ function Auth() {
         // Create artist profile
         await createArtistProfile(userCredential.user.uid, email, username);
         
-        toast.success('Account created! Welcome to ArtistLine!');
+        toast.success('Account created — welcome to Buzz!');
         navigate('/dashboard');
       }
     } catch (error) {
@@ -118,7 +118,7 @@ function Auth() {
         await createArtistProfile(result.user.uid, result.user.email, finalUsername);
       }
       
-      toast.success('Welcome to ArtistLine!');
+      toast.success('Welcome to Buzz!');
       navigate('/dashboard');
     } catch (error) {
       console.error('Google sign-in error:', error);
@@ -133,10 +133,10 @@ function Auth() {
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-lavender-600 mb-2">
-            🎨 ArtistLine
+          <h1 className="text-5xl font-bold text-ink-900 mb-2">
+            Buzz
           </h1>
-          <p className="text-gray-600">
+          <p className="text-stone-600">
             {isLogin ? 'Welcome back!' : 'Create your account'}
           </p>
         </div>
@@ -146,7 +146,7 @@ function Auth() {
           <form onSubmit={handleEmailAuth} className="space-y-4">
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-ink-700 mb-2">
                   Username
                 </label>
                 <input
@@ -156,17 +156,17 @@ function Auth() {
                   required={!isLogin}
                   minLength={3}
                   maxLength={30}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                  className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                   placeholder="your-username"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-stone-500 mt-1">
                   This will be your permanent link: artistline.com/{username || 'your-username'}
                 </p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Email
               </label>
               <input
@@ -174,13 +174,13 @@ function Auth() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="artist@example.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Password
               </label>
               <input
@@ -189,7 +189,7 @@ function Auth() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="••••••••"
               />
             </div>
@@ -197,7 +197,7 @@ function Auth() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-lavender-500 to-softpink-500 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+              className="w-full bg-honey-500 text-ink-900 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
             >
               {loading ? 'Loading...' : (isLogin ? 'Log In' : 'Sign Up')}
             </button>
@@ -205,16 +205,16 @@ function Auth() {
 
           {/* Divider */}
           <div className="flex items-center my-6">
-            <div className="flex-1 border-t border-gray-300"></div>
-            <span className="px-4 text-sm text-gray-500">or</span>
-            <div className="flex-1 border-t border-gray-300"></div>
+            <div className="flex-1 border-t border-cream-300"></div>
+            <span className="px-4 text-sm text-stone-500">or</span>
+            <div className="flex-1 border-t border-cream-300"></div>
           </div>
 
           {/* Google Sign In */}
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full bg-white border-2 border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full bg-white border-2 border-cream-300 text-ink-700 py-3 rounded-lg font-semibold hover:bg-cream-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -229,7 +229,7 @@ function Auth() {
           <div className="mt-6 text-center">
             <button
               onClick={() => setIsLogin(!isLogin)}
-              className="text-lavender-600 hover:text-lavender-700 font-medium"
+              className="text-ink-900 hover:text-ink-900 font-medium"
             >
               {isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}
             </button>
@@ -237,7 +237,7 @@ function Auth() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-sm text-gray-500 mt-6">
+        <p className="text-center text-sm text-stone-500 mt-6">
           By continuing, you agree to our Terms of Service
         </p>
       </div>

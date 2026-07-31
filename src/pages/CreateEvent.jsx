@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { THEME_OPTIONS } from '../utils/theme';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
@@ -14,13 +15,7 @@ const EVENT_TYPES = [
   { value: 'other', label: '🎨 Other', emoji: '🎨' }
 ];
 
-const COLOR_THEMES = [
-  { value: 'lavender', label: 'Lavender', color: 'bg-lavender-400' },
-  { value: 'mint', label: 'Mint Green', color: 'bg-mint-400' },
-  { value: 'softpink', label: 'Soft Pink', color: 'bg-softpink-400' },
-  { value: 'peach', label: 'Peach', color: 'bg-peach-400' },
-  { value: 'skyblue', label: 'Sky Blue', color: 'bg-skyblue-400' }
-];
+const COLOR_THEMES = THEME_OPTIONS;
 
 function CreateEvent() {
   const { currentUser } = useAuth();
@@ -33,7 +28,7 @@ function CreateEvent() {
     location: '',
     date: '',
     eventType: '',
-    colorTheme: 'lavender',
+    colorTheme: 'honey',
     notes: ''
   });
 
@@ -78,27 +73,27 @@ function CreateEvent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50">
+    <div className="min-h-screen bg-cream-100">
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <button
           onClick={() => navigate('/dashboard')}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors text-sm mb-6"
+          className="flex items-center gap-2 text-stone-600 hover:text-ink-900 transition-colors text-sm mb-6"
         >
           <ArrowLeft size={16} />
           <span>Back to Dashboard</span>
         </button>
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-lavender-600 mb-2">
+          <h1 className="text-3xl font-bold text-ink-900 mb-2">
             Create New Event
           </h1>
-          <p className="text-gray-600 mb-8">
+          <p className="text-stone-600 mb-8">
             Set up your event and start managing queues
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Event Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Event Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -107,40 +102,40 @@ function CreateEvent() {
                 value={formData.name}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="Emma's 5th Birthday Party"
               />
             </div>
 
             {/* Location */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Location <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-3.5 text-gray-400" size={20} />
+                <MapPin className="absolute left-3 top-3.5 text-stone-400" size={20} />
                 <input
                   type="text"
                   name="location"
                   value={formData.location}
                   onChange={handleChange}
                   required
-                  className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                  className="w-full pl-11 pr-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                   placeholder="123 Main Street, Brooklyn, NY"
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-stone-500 mt-1">
                 Enter the full address where the event will take place
               </p>
             </div>
 
             {/* Date */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Event Date <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <Calendar className="absolute left-3 top-3.5 text-gray-400" size={20} />
+                <Calendar className="absolute left-3 top-3.5 text-stone-400" size={20} />
                 <input
                   type="date"
                   name="date"
@@ -148,14 +143,14 @@ function CreateEvent() {
                   onChange={handleChange}
                   required
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full pl-11 pr-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                  className="w-full pl-11 pr-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                 />
               </div>
             </div>
 
             {/* Color Theme */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
+              <label className="block text-sm font-medium text-ink-700 mb-3">
                 <Palette className="inline mr-2" size={18} />
                 Color Theme
               </label>
@@ -168,13 +163,13 @@ function CreateEvent() {
                     className={`relative p-4 rounded-xl border-2 transition-all ${
                       formData.colorTheme === theme.value
                         ? 'border-gray-800 shadow-lg'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-cream-200 hover:border-cream-300'
                     }`}
                   >
                     <div className={`w-full h-12 rounded-lg ${theme.color}`}></div>
                     <p className="text-xs text-center mt-2 font-medium">{theme.label}</p>
                     {formData.colorTheme === theme.value && (
-                      <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full w-6 h-6 flex items-center justify-center">
+                      <div className="absolute -top-2 -right-2 bg-sage-1000 text-white rounded-full w-6 h-6 flex items-center justify-center">
                         ✓
                       </div>
                     )}
@@ -184,11 +179,11 @@ function CreateEvent() {
             </div>
 
             {/* Advanced Options */}
-            <div className="border-t border-gray-200 pt-6">
+            <div className="border-t border-cream-200 pt-6">
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-2 text-lavender-600 hover:text-lavender-700 font-medium mb-4"
+                className="flex items-center gap-2 text-ink-900 hover:text-ink-900 font-medium mb-4"
               >
                 <span>{showAdvanced ? '▼' : '▶'}</span>
                 Advanced Options (Optional)
@@ -198,14 +193,14 @@ function CreateEvent() {
                 <div className="space-y-4 pl-6">
                   {/* Event Type */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-ink-700 mb-2">
                       Event Type
                     </label>
                     <select
                       name="eventType"
                       value={formData.eventType}
                       onChange={handleChange}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                      className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                     >
                       <option value="">Select type (optional)</option>
                       {EVENT_TYPES.map((type) => (
@@ -218,7 +213,7 @@ function CreateEvent() {
 
                   {/* Internal Notes */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-ink-700 mb-2">
                       Internal Notes
                     </label>
                     <textarea
@@ -226,7 +221,7 @@ function CreateEvent() {
                       value={formData.notes}
                       onChange={handleChange}
                       rows={3}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors resize-none"
+                      className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors resize-none"
                       placeholder="Any notes for yourself about this event..."
                     />
                   </div>
@@ -239,14 +234,14 @@ function CreateEvent() {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                className="flex-1 px-6 py-3 border-2 border-cream-300 text-ink-700 rounded-lg font-semibold hover:bg-cream-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                className="flex-1 bg-honey-500 text-ink-900 px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create Event'}
               </button>

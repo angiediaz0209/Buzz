@@ -8,3 +8,13 @@ createRoot(document.getElementById('root')).render(
     <App />
   </StrictMode>,
 )
+
+// Register the service worker in production only, so the dev server keeps
+// serving fresh modules. This is what makes "Install app" available.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((error) => console.error('Service worker registration failed:', error))
+  })
+}

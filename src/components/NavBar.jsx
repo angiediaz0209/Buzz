@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { LogOut, Menu, X, Home, Users } from 'lucide-react';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { LogOut, Home, Users, QrCode } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Logo from './Logo';
+import { BuzzMark } from './BuzzBrand';
+import ThemeToggle from './ThemeToggle';
+import { useQueueCustomers } from '../hooks/useQueueCustomers';
 
 function NavBar() {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [activeEvents, setActiveEvents] = useState([]);
   const [queues, setQueues] = useState([]);
 
@@ -19,38 +20,49 @@ function NavBar() {
   useEffect(() => {
     if (!currentUser) return;
 
+    // No orderBy here on purpose: these events are only used to filter queues,
+    // and adding one would require an (artistId, status, createdAt) composite
+    // index. Without it Firestore rejects the listener and the nav goes empty.
     const eventsRef = collection(db, 'events');
     const q = query(
       eventsRef,
       where('artistId', '==', currentUser.uid),
-      where('status', '==', 'active'),
-      orderBy('createdAt', 'desc')
+      where('status', '==', 'active')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setActiveEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setActiveEvents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      },
+      (error) => console.error('Error loading active events:', error)
+    );
 
     return () => unsubscribe();
   }, [currentUser]);
 
+  const activeEventIdsKey = activeEvents.map(e => e.id).sort().join(',');
+
   // Load queues for active events
   useEffect(() => {
-    if (!currentUser || activeEvents.length === 0) {
-      setQueues([]);
-      return;
-    }
+    const eventIds = activeEventIdsKey ? activeEventIdsKey.split(',') : [];
+    if (eventIds.length === 0) return;
 
-    const eventIds = activeEvents.map(e => e.id);
     const queuesRef = collection(db, 'queues');
-    const q = query(queuesRef, where('eventId', 'in', eventIds));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setQueues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubscribe = onSnapshot(
+      query(queuesRef, where('eventId', 'in', eventIds.slice(0, 30))),
+      (snapshot) => setQueues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+    );
 
     return () => unsubscribe();
-  }, [currentUser, activeEvents]);
+  }, [activeEventIdsKey]);
+
+  const openQueues = queues.filter(
+    q => q.status === 'open' && activeEvents.some(e => e.id === q.eventId)
+  );
+
+  // Hooks must run before the early return below
+  const { waitingFor } = useQueueCustomers(openQueues.map(q => q.id));
 
   if (!currentUser) return null;
 
@@ -59,172 +71,138 @@ function NavBar() {
       await logout();
       toast.success('Logged out successfully');
       navigate('/');
-    } catch (error) {
+    } catch {
       toast.error('Failed to logout');
     }
   };
 
-  const isActive = (path) => location.pathname === path;
+  const totalWaiting = openQueues.reduce((sum, q) => sum + waitingFor(q), 0);
 
-  const getQueuesForEvent = (eventId) => queues.filter(q => q.eventId === eventId);
+  const onDashboard = location.pathname === '/dashboard';
+  const onShare = location.pathname === '/share';
+  const onQueue = location.pathname.startsWith('/queue/');
+
+  // One open queue goes straight to it; otherwise land on the dashboard,
+  // where "Live now" lists them all.
+  const goToQueues = () => {
+    if (openQueues.length === 1) {
+      navigate(`/queue/${openQueues[0].id}/manage`);
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
+  const tabClass = (active) =>
+    `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl transition-colors ${
+      active ? 'text-ink-900 bg-cream-50' : 'text-stone-500 hover:text-ink-700'
+    }`;
 
   return (
     <>
-      <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+      {/* Top bar */}
+      <nav className="bg-white shadow-sm border-b border-cream-200 sticky top-0 z-50 print-hide">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-14">
-            {/* Logo */}
             <button
               onClick={() => navigate('/dashboard')}
-              className="text-xl font-bold text-lavender-600 shrink-0"
+              className="shrink-0"
+              aria-label="Buzz home"
             >
-              <Logo size={28} className="inline-block mr-1.5 -mt-0.5" /> ArtistLine
+              <BuzzMark size={28} textClass="text-xl" className="text-ink-900" />
             </button>
 
-            {/* Desktop Links */}
+            {/* Desktop links */}
             <div className="hidden md:flex items-center gap-1">
               <button
                 onClick={() => navigate('/dashboard')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive('/dashboard')
-                    ? 'bg-lavender-100 text-lavender-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  onDashboard
+                    ? 'bg-honey-100 text-ink-900'
+                    : 'text-stone-600 hover:bg-cream-200 hover:text-ink-900'
                 }`}
               >
                 <Home size={16} />
                 Dashboard
               </button>
 
-              {/* Active queues as desktop quick-links */}
-              {activeEvents.map((event) => {
-                const eventQueues = getQueuesForEvent(event.id);
-                if (eventQueues.length === 0) return null;
-                return eventQueues.map((queue) => (
-                  <button
-                    key={queue.id}
-                    onClick={() => navigate(`/queue/${queue.id}/manage`)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      location.pathname === `/queue/${queue.id}/manage`
-                        ? 'bg-lavender-100 text-lavender-700'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    <Users size={16} />
-                    {queue.name}
-                    {queue.waitingCount > 0 && (
-                      <span className="bg-softpink-100 text-softpink-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                        {queue.waitingCount}
-                      </span>
-                    )}
-                  </button>
-                ));
-              })}
-            </div>
+              {openQueues.map((queue) => (
+                <button
+                  key={queue.id}
+                  onClick={() => navigate(`/queue/${queue.id}/manage`)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === `/queue/${queue.id}/manage`
+                      ? 'bg-honey-100 text-ink-900'
+                      : 'text-stone-600 hover:bg-cream-200 hover:text-ink-900'
+                  }`}
+                >
+                  <Users size={16} />
+                  {queue.name}
+                  {waitingFor(queue) > 0 && (
+                    <span className="bg-sage-100 text-sage-600 text-xs font-bold px-2 py-0.5 rounded-full">
+                      {waitingFor(queue)}
+                    </span>
+                  )}
+                </button>
+              ))}
 
-            {/* Desktop Logout */}
-            <button
-              onClick={handleLogout}
-              className="hidden md:flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
-
-            {/* Mobile Hamburger */}
-            <button
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white">
-            <div className="px-4 py-3 space-y-1">
-              {/* Active queues grouped by event */}
-              {activeEvents.map((event) => {
-                const eventQueues = getQueuesForEvent(event.id);
-                if (eventQueues.length === 0) return null;
-                return (
-                  <div key={event.id}>
-                    <button
-                      onClick={() => {
-                        navigate(`/event/${event.id}`);
-                        setMobileOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-green-700 uppercase tracking-wide"
-                    >
-                      <span className="w-2 h-2 bg-green-500 rounded-full" />
-                      {event.name}
-                    </button>
-                    {eventQueues.map((queue) => (
-                      <button
-                        key={queue.id}
-                        onClick={() => {
-                          navigate(`/queue/${queue.id}/manage`);
-                          setMobileOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-lg text-left font-medium transition-colors ${
-                          location.pathname === `/queue/${queue.id}/manage`
-                            ? 'bg-lavender-100 text-lavender-700'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Users size={20} />
-                          {queue.name}
-                        </div>
-                        {queue.waitingCount > 0 && (
-                          <span className="bg-softpink-100 text-softpink-700 text-xs font-bold px-2.5 py-1 rounded-full">
-                            {queue.waitingCount} waiting
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-
-              {/* Divider if there were active queues */}
-              {activeEvents.some(e => getQueuesForEvent(e.id).length > 0) && (
-                <div className="border-t border-gray-200 pt-2 mt-2" />
-              )}
-
-              {/* Dashboard */}
               <button
-                onClick={() => {
-                  navigate('/dashboard');
-                  setMobileOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left font-medium transition-colors ${
-                  isActive('/dashboard')
-                    ? 'bg-lavender-100 text-lavender-700'
-                    : 'text-gray-700 hover:bg-gray-100'
+                onClick={() => navigate('/share')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  onShare
+                    ? 'bg-honey-100 text-ink-900'
+                    : 'text-stone-600 hover:bg-cream-200 hover:text-ink-900'
                 }`}
               >
-                <Home size={20} />
-                Dashboard
+                <QrCode size={16} />
+                Share
               </button>
+            </div>
 
-              {/* Logout */}
-              <div className="border-t border-gray-200 pt-2 mt-2">
-                <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left font-medium text-red-600 hover:bg-red-50 transition-colors"
-                >
-                  <LogOut size={20} />
-                  Logout
-                </button>
-              </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <ThemeToggle />
+              {/* Logout — icon only on mobile, since nav lives in the bottom bar */}
+              <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:bg-cream-200 rounded-lg transition-colors"
+              aria-label="Log out"
+            >
+                <LogOut size={16} />
+                <span className="hidden md:inline">Logout</span>
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      </nav>
+
+      {/* Bottom tab bar — mobile only, app-style navigation */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-cream-200 shadow-lg print-hide"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        aria-label="Main"
+      >
+        <div className="flex items-stretch gap-1 px-2 pt-1 pb-1">
+          <button onClick={() => navigate('/dashboard')} className={tabClass(onDashboard)}>
+            <Home size={22} />
+            <span className="text-[11px] font-semibold">Home</span>
+          </button>
+
+          <button onClick={goToQueues} className={tabClass(onQueue)}>
+            <span className="relative">
+              <Users size={22} />
+              {totalWaiting > 0 && (
+                <span className="absolute -top-1.5 -right-2 bg-sage-400 text-ink-900 text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center">
+                  {totalWaiting}
+                </span>
+              )}
+            </span>
+            <span className="text-[11px] font-semibold">Queues</span>
+          </button>
+
+          <button onClick={() => navigate('/share')} className={tabClass(onShare)}>
+            <QrCode size={22} />
+            <span className="text-[11px] font-semibold">Share</span>
+          </button>
+        </div>
       </nav>
     </>
   );

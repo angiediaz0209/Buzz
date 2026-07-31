@@ -1,3 +1,6 @@
+// Buzz mark: honey hexagon with the bee's face inside.
+// Drawn as SVG rather than using the PNG so it stays crisp and works on any
+// background (the PNG crop carries a cream backing).
 function Logo({ size = 28, className = '' }) {
   return (
     <svg
@@ -7,23 +10,43 @@ function Logo({ size = 28, className = '' }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
+      aria-hidden="true"
     >
-      {/* Paint palette */}
+      {/* Hexagon */}
       <path
-        d="M16 2C8.268 2 2 8.268 2 16c0 7.732 6.268 14 14 14 1.105 0 2-.895 2-2 0-.52-.195-1-.52-1.36-.31-.35-.48-.79-.48-1.24 0-1.1.9-2 2-2h2.36c4.34 0 7.86-3.52 7.86-7.86C29.22 8.56 23.36 2 16 2z"
-        fill="url(#palette-gradient)"
+        d="M16 1.6l11.4 6.6a2.4 2.4 0 011.2 2.08v11.44a2.4 2.4 0 01-1.2 2.08L16 30.4 4.6 23.8a2.4 2.4 0 01-1.2-2.08V10.28A2.4 2.4 0 014.6 8.2L16 1.6z"
+        fill="#FDCA50"
+        stroke="#18232A"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
       />
-      {/* Paint dots */}
-      <circle cx="10" cy="13" r="2.5" fill="#7C3AED" />
-      <circle cx="15" cy="9" r="2.5" fill="#EC4899" />
-      <circle cx="21" cy="11" r="2.5" fill="#F59E0B" />
-      <circle cx="11" cy="19" r="2.5" fill="#10B981" />
-      <defs>
-        <linearGradient id="palette-gradient" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#A78BFA" />
-          <stop offset="1" stopColor="#F9A8D4" />
-        </linearGradient>
-      </defs>
+
+      {/* Antennae */}
+      <path
+        d="M12.4 10.2C11.5 8.6 10.6 7.6 9.6 7.1M19.6 10.2c.9-1.6 1.8-2.6 2.8-3.1"
+        stroke="#18232A"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="9.1" cy="6.6" r="1.5" fill="#18232A" />
+      <circle cx="22.9" cy="6.6" r="1.5" fill="#18232A" />
+
+      {/* Head */}
+      <path
+        d="M16 9.6c4.2 0 7 2.5 7 5.9 0 3.5-3 6.1-7 6.1s-7-2.6-7-6.1c0-3.4 2.8-5.9 7-5.9z"
+        fill="#18232A"
+      />
+
+      {/* Glasses */}
+      <circle cx="12.9" cy="15.1" r="2.5" fill="#FDCA50" />
+      <circle cx="19.1" cy="15.1" r="2.5" fill="#FDCA50" />
+
+      {/* Body stripe below the head */}
+      <path
+        d="M10.6 23.1h10.8c-.9 1.5-2.9 2.5-5.4 2.5s-4.5-1-5.4-2.5z"
+        fill="#18232A"
+      />
+      <rect x="11.6" y="21.4" width="8.8" height="1.5" rx="0.75" fill="#F8B51E" />
     </svg>
   );
 }

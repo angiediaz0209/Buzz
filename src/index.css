@@ -4,6 +4,159 @@
 
 @layer base {
   body {
-    @apply bg-gradient-to-br from-lavender-50 to-softpink-50 min-h-screen;
+    @apply bg-cream-100 text-ink-900 min-h-screen antialiased;
+  }
+}
+
+/*
+  ── Dark mode ────────────────────────────────────────────────────────────────
+  The Buzz palette is already semantic — cream is "page", white is "card", ink
+  is "text", honey and sage are accents — so dark mode remaps those utilities
+  in one place rather than sprinkling dark: variants through 18 components.
+  Adding a colour here is the only step needed to keep dark mode in sync.
+
+  The darks stay warm (a touch of brown) instead of neutral grey, so the honey
+  accents and the mascot's cream backing still feel like they belong.
+*/
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #141d23;
+  color: #f6ebdd;
+}
+
+/* --- Surfaces ------------------------------------------------------------ */
+.dark .bg-cream-100 { background-color: #141d23; }
+.dark .bg-cream-50 { background-color: #1a252b; }
+.dark .bg-white { background-color: #212e35; }
+.dark .bg-cream-200,
+.dark .bg-stone-200 { background-color: #2a3a42; }
+.dark .bg-cream-300 { background-color: #32424b; }
+
+/* A deliberately dark panel in the light theme has to lift, not sink */
+.dark .bg-ink-900 { background-color: #1f2c34; }
+.dark .bg-ink-800 { background-color: #26333b; }
+
+/* --- Text --------------------------------------------------------------- */
+.dark .text-ink-900 { color: #f6ebdd; }
+.dark .text-ink-800 { color: #eadfd0; }
+.dark .text-ink-700 { color: #dcd0bf; }
+.dark .text-ink-500 { color: #bcb0a1; }
+.dark .text-stone-600 { color: #a8a29a; }
+.dark .text-stone-500 { color: #98928b; }
+.dark .text-stone-400 { color: #857f79; }
+
+/* --- Borders ------------------------------------------------------------ */
+.dark .border-cream-200,
+.dark .border-cream-300 { border-color: #2e3c44; }
+.dark .border-stone-300 { border-color: #3c4a53; }
+.dark .divide-cream-200 > * + * { border-color: #2e3c44; }
+
+/* --- Accent tints ------------------------------------------------------- */
+/* honey-100 / sage-100 are near-white; as large fills they'd glare on dark */
+.dark .bg-honey-100 { background-color: #3b2e13; }
+.dark .bg-sage-100 { background-color: #1e3a33; }
+.dark .text-honey-700 { color: #fedc8a; }
+.dark .text-sage-600 { color: #a9cfc1; }
+
+/* ---------------------------------------------------------------------------
+   Exceptions: honey and sage solid fills stay light in dark mode, so anything
+   sitting on them — the element itself AND its descendants — has to keep its
+   light-mode colours. Without the descendant half of these rules, text inside
+   a honey card turns cream on yellow.
+   --------------------------------------------------------------------------- */
+.dark .bg-honey-400.text-ink-900,
+.dark .bg-honey-500.text-ink-900,
+.dark .bg-sage-400.text-ink-900,
+.dark .bg-honey-400 .text-ink-900,
+.dark .bg-honey-500 .text-ink-900,
+.dark .bg-sage-400 .text-ink-900 { color: #18232a; }
+
+.dark .bg-honey-400 .text-ink-700,
+.dark .bg-honey-500 .text-ink-700,
+.dark .bg-sage-400 .text-ink-700 { color: #243239; }
+
+.dark .bg-honey-400 .text-stone-600,
+.dark .bg-honey-500 .text-stone-600,
+.dark .bg-sage-400 .text-stone-600,
+.dark .bg-honey-400 .text-stone-500,
+.dark .bg-honey-500 .text-stone-500 { color: #6b6259; }
+
+.dark .bg-honey-400 .text-honey-700,
+.dark .bg-honey-500 .text-honey-700 { color: #b87d0c; }
+
+/* Cards and buttons nested in a light panel keep their light surfaces */
+.dark .bg-honey-400 .bg-white,
+.dark .bg-honey-500 .bg-white,
+.dark .bg-sage-400 .bg-white { background-color: #ffffff; }
+
+.dark .bg-honey-400 .border-cream-300,
+.dark .bg-honey-500 .border-cream-300 { border-color: #e8d4be; }
+
+/* A dark-on-light button becomes light-on-dark … */
+.dark .bg-ink-900.text-white {
+  background-color: #f6ebdd;
+  color: #18232a;
+}
+.dark .bg-ink-900.text-white:hover { background-color: #eadfd0; }
+
+/* … unless it's already sitting on a light accent panel */
+.dark .bg-honey-400 .bg-ink-900.text-white,
+.dark .bg-honey-500 .bg-ink-900.text-white,
+.dark .bg-sage-400 .bg-ink-900.text-white {
+  background-color: #18232a;
+  color: #ffffff;
+}
+
+/* Inputs need their own surface so placeholder text stays legible */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #1a252b;
+  color: #f6ebdd;
+  border-color: #2e3c44;
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: #7d776f; }
+
+/*
+  Printing a QR should produce a table sign, not a screenshot of the app.
+  The card being printed gets .print-area; everything else is hidden via
+  visibility so the printed page keeps its normal layout box.
+*/
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    box-shadow: none !important;
+    text-align: center;
+  }
+
+  /* Screen-only chrome inside the printed card */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* Sign heading that only exists on paper */
+  .print-show {
+    display: block !important;
   }
 }

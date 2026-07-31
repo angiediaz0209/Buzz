@@ -56,27 +56,27 @@ function CreateQueue() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50">
+    <div className="min-h-screen bg-cream-100">
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <button
           onClick={() => navigate(`/event/${eventId}`)}
-          className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors text-sm mb-6"
+          className="flex items-center gap-2 text-stone-600 hover:text-ink-900 transition-colors text-sm mb-6"
         >
           <ArrowLeft size={16} />
           <span>Back to Event</span>
         </button>
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-lavender-600 mb-2">
+          <h1 className="text-3xl font-bold text-ink-900 mb-2">
             Create New Queue
           </h1>
-          <p className="text-gray-600 mb-8">
+          <p className="text-stone-600 mb-8">
             Add a queue to your event (e.g., "Face Painting", "Balloon Animals")
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Queue Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-ink-700 mb-2">
                 Queue Name <span className="text-red-500">*</span>
               </label>
               <input
@@ -85,16 +85,16 @@ function CreateQueue() {
                 value={formData.name}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-lavender-500 focus:outline-none transition-colors"
+                className="w-full px-4 py-3 border-2 border-cream-200 rounded-lg focus:border-honey-500 focus:outline-none transition-colors"
                 placeholder="Face Painting Line"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-stone-500 mt-1">
                 This name will be shown to clients when they join the queue
               </p>
             </div>
 
             {/* Visibility Toggle */}
-            <div className="bg-lavender-50 rounded-xl p-6 border-2 border-lavender-200">
+            <div className="bg-cream-50 rounded-xl p-6 border-2 border-cream-300">
               <div className="flex items-start gap-4">
                 <input
                   type="checkbox"
@@ -102,13 +102,13 @@ function CreateQueue() {
                   id="isVisible"
                   checked={formData.isVisible}
                   onChange={handleChange}
-                  className="mt-1 w-5 h-5 text-lavender-600 border-gray-300 rounded focus:ring-lavender-500"
+                  className="mt-1 w-5 h-5 shrink-0 accent-honey-500 rounded"
                 />
                 <div className="flex-1">
-                  <label htmlFor="isVisible" className="font-semibold text-gray-900 cursor-pointer">
+                  <label htmlFor="isVisible" className="font-semibold text-ink-900 cursor-pointer">
                     Visible to Clients
                   </label>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-sm text-stone-600 mt-1">
                     When enabled, clients will see this queue when they scan the QR code. 
                     Disable if you want to manage this queue privately or use it only on specific kiosk stations.
                   </p>
@@ -117,8 +117,8 @@ function CreateQueue() {
             </div>
 
             {/* Info Box */}
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-              <p className="text-sm text-blue-900">
+            <div className="bg-sage-100 border-2 border-sage-200 rounded-xl p-4">
+              <p className="text-sm text-ink-800">
                 <strong>💡 Tip:</strong> You can create multiple queues for different activities at the same event. 
                 For example: "Quick Face Paint" and "Full Face Designs" or "Face Painting" and "Balloon Animals".
               </p>
@@ -129,14 +129,14 @@ function CreateQueue() {
               <button
                 type="button"
                 onClick={() => navigate(`/event/${eventId}`)}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                className="flex-1 px-6 py-3 border-2 border-cream-300 text-ink-700 rounded-lg font-semibold hover:bg-cream-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                className="flex-1 bg-honey-500 text-ink-900 px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
               >
                 {loading ? 'Creating...' : 'Create Queue'}
               </button>

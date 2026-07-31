@@ -9,9 +9,10 @@ import {
   onSnapshot,
   orderBy
 } from 'firebase/firestore';
-import { UserPlus, Search, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import Logo from '../components/Logo';
+import { BuzzMark, Mascot } from '../components/BuzzBrand';
+import TurnChoice from '../components/TurnChoice';
 
 function ArtistProfile() {
   const { username } = useParams();
@@ -22,6 +23,9 @@ function ArtistProfile() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(location.state?.returnToChoice ? 'choice' : 'welcome');
+
+  // Kiosk mode is enabled via ?kiosk=1 in the URL (set once on the iPad)
+  const isKiosk = new URLSearchParams(location.search).get('kiosk') === '1';
 
   useEffect(() => {
     if (!username) return;
@@ -91,10 +95,10 @@ function ArtistProfile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-lavender-600"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-honey-500"></div>
+          <p className="mt-4 text-stone-600">Loading...</p>
         </div>
       </div>
     );
@@ -102,126 +106,101 @@ function ArtistProfile() {
 
   if (!artist) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center p-6">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Artist Not Found</h1>
-          <p className="text-gray-600">This artist profile doesn't exist.</p>
+          <h1 className="text-2xl font-extrabold text-ink-900 mb-2">Artist not found</h1>
+          <p className="text-stone-600">This profile doesn&apos;t exist.</p>
         </div>
       </div>
     );
   }
 
-  // Welcome screen
+  // Welcome / splash screen
   if (step === 'welcome') {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col p-6 overflow-hidden">
-        <div className="flex items-center gap-2">
-          <Logo size={28} />
-          <span className="text-lg font-bold text-white/70" style={{ fontFamily: "'Poppins', sans-serif" }}>ArtistLine</span>
+      <div className="min-h-screen bg-cream-100 flex flex-col items-center px-6 py-10">
+        <BuzzMark size={40} textClass="text-4xl" className="text-ink-900" />
+
+        <div className="flex-1 flex items-center justify-center w-full">
+          <Mascot className="w-56 sm:w-72 h-auto" alt="Buzz the bee, ready to take your name" />
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-          <h1
-            className="font-black text-white leading-none tracking-tight mb-10"
-            style={{
-              fontFamily: "'Poppins', sans-serif",
-              fontSize: 'clamp(4rem, 14vw, 10rem)',
-            }}
-          >
-            Get in<br />Line
-          </h1>
-          <button
-            onClick={() => setStep('choice')}
-            className="bg-white text-gray-900 font-extrabold text-3xl w-full max-w-xs py-6 rounded-2xl shadow-lg hover:shadow-xl hover:scale-105 transition-all"
-            style={{ fontFamily: "'Poppins', sans-serif" }}
-          >
-            Start
-          </button>
-        </div>
+        <p className="text-2xl font-extrabold text-ink-900 text-center leading-snug mb-8">
+          Your place in line,
+          <br />
+          made <span className="text-honey-500">simple</span>.
+        </p>
+
+        <button
+          onClick={() => setStep('choice')}
+          className="bg-honey-500 text-ink-900 font-extrabold text-2xl w-full max-w-sm py-5 rounded-2xl shadow-lg hover:bg-honey-600 transition-colors"
+        >
+          Start
+        </button>
       </div>
     );
   }
 
-  // Choice screen — Get a Turn or Already in Line
+  // Choice screen — take a number, or look up one you already have
   if (step === 'choice') {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col p-6">
-        {/* Back button */}
-        <button
-          onClick={() => setStep('welcome')}
-          className="flex items-center gap-2 text-white/60 hover:text-white transition-colors w-fit"
-        >
-          <ArrowLeft size={20} />
-          <span className="font-medium">Back</span>
-        </button>
-
-        {/* Two big buttons */}
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="grid grid-cols-2 gap-5 sm:gap-8 w-full max-w-2xl">
-            <button
-              onClick={() => {
-                if (events.length === 1) {
-                  navigate(`/join/${events[0].id}`, { state: { artistUsername: username } });
-                } else {
-                  setStep('events');
-                }
-              }}
-              className="bg-white/10 hover:bg-white/15 border-2 border-white/20 rounded-3xl aspect-square flex flex-col items-center justify-center gap-6 transition-all hover:scale-105"
-            >
-              <UserPlus size={72} className="text-white" />
-              <span className="text-white text-2xl sm:text-3xl font-bold">Get a Turn</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (events.length === 1) {
-                  navigate(`/event/${events[0].id}/find`, { state: { artistUsername: username } });
-                } else {
-                  setStep('events');
-                }
-              }}
-              className="bg-white/10 hover:bg-white/15 border-2 border-white/20 rounded-3xl aspect-square flex flex-col items-center justify-center gap-6 transition-all hover:scale-105"
-            >
-              <Search size={72} className="text-white" />
-              <span className="text-white text-2xl sm:text-3xl font-bold">Already in Line?</span>
-            </button>
-          </div>
-        </div>
-      </div>
+      <TurnChoice
+        title={artist.displayName || artist.username}
+        subtitle="What would you like to do?"
+        onBack={() => setStep('welcome')}
+        onGetTurn={() => {
+          if (events.length === 1) {
+            navigate(`/join/${events[0].id}`, {
+              state: { artistUsername: username, kiosk: isKiosk }
+            });
+          } else {
+            setStep('events');
+          }
+        }}
+        onFindTurn={() => {
+          if (events.length === 1) {
+            navigate(`/event/${events[0].id}/find`, {
+              state: { artistUsername: username, kiosk: isKiosk }
+            });
+          } else {
+            setStep('events');
+          }
+        }}
+      />
     );
   }
 
   // Event picker (only shown when multiple events)
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col p-6">
+    <div className="min-h-screen bg-cream-100 flex flex-col p-6">
       <button
         onClick={() => setStep('choice')}
-        className="flex items-center gap-2 text-white/60 hover:text-white transition-colors w-fit"
+        className="flex items-center gap-2 text-stone-600 hover:text-ink-900 transition-colors w-fit"
       >
         <ArrowLeft size={20} />
-        <span className="font-medium">Back</span>
+        <span className="font-semibold">Back</span>
       </button>
 
       <main className="flex-1 flex flex-col justify-center max-w-lg mx-auto w-full py-8">
         {events.length === 0 ? (
           <div className="text-center">
-            <h3 className="text-xl font-bold text-white mb-2">No Active Events</h3>
-            <p className="text-white/60">
-              This artist doesn't have any upcoming events at the moment.
+            <h3 className="text-xl font-extrabold text-ink-900 mb-2">Nothing on right now</h3>
+            <p className="text-stone-600">
+              This artist doesn&apos;t have any upcoming events.
             </p>
           </div>
         ) : (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-white mb-4">Choose an Event</h2>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">Choose an event</h2>
             {events.map((event) => (
               <button
                 key={event.id}
                 onClick={() => navigate(`/join/${event.id}`)}
-                className="w-full bg-white/10 hover:bg-white/15 border-2 border-white/20 rounded-2xl p-6 text-left transition-all"
+                className="w-full bg-white hover:border-honey-400 border-2 border-cream-300 rounded-2xl p-6 text-left transition-colors shadow-sm"
               >
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xl font-bold text-white">{event.name}</h3>
-                  <span className="text-sm font-semibold text-white/60">Join →</span>
+                  <h3 className="text-xl font-extrabold text-ink-900">{event.name}</h3>
+                  <span className="text-sm font-bold text-honey-700">Join →</span>
                 </div>
               </button>
             ))}

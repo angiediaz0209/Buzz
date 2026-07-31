@@ -81,10 +81,10 @@ function EventDetails() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-lavender-600"></div>
-          <p className="mt-4 text-gray-600">Loading event...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-honey-500"></div>
+          <p className="mt-4 text-stone-600">Loading event...</p>
         </div>
       </div>
     );
@@ -117,26 +117,26 @@ function EventDetails() {
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg}`}>
+    <div className={`min-h-screen bg-cream-100`}>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Event Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
             <button
               onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3 text-sm"
+              className="flex items-center gap-2 text-stone-600 hover:text-ink-900 transition-colors mb-3 text-sm"
             >
               <ArrowLeft size={16} />
               <span>Back to Dashboard</span>
             </button>
-            <h1 className="text-3xl font-bold text-gray-900">{event.name}</h1>
-            <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-600">
+            <h1 className="text-3xl font-bold text-ink-900">{event.name}</h1>
+            <div className="flex flex-wrap gap-4 mt-2 text-sm text-stone-600">
               <div className="flex items-center gap-2">
-                <Calendar size={16} className="text-lavender-500" />
+                <Calendar size={16} className="text-honey-600" />
                 <span>{formatDate(event.date)}</span>
               </div>
               <div className="flex items-center gap-2">
-                <MapPin size={16} className="text-lavender-500" />
+                <MapPin size={16} className="text-honey-600" />
                 <span>{event.location?.address || 'No location'}</span>
               </div>
             </div>
@@ -154,24 +154,24 @@ function EventDetails() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-lavender-100 rounded-lg">
-                <Users className="text-lavender-600" size={24} />
+              <div className="p-3 bg-honey-100 rounded-lg">
+                <Users className="text-ink-900" size={24} />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Queues</p>
-                <p className="text-3xl font-bold text-gray-900">{queues.length}</p>
+                <p className="text-sm text-stone-600">Total Queues</p>
+                <p className="text-3xl font-bold text-ink-900">{queues.length}</p>
               </div>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-softpink-100 rounded-lg">
-                <Users className="text-softpink-600" size={24} />
+              <div className="p-3 bg-sage-100 rounded-lg">
+                <Users className="text-sage-500" size={24} />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Customers</p>
-                <p className="text-3xl font-bold text-gray-900">{event.totalCustomers || 0}</p>
+                <p className="text-sm text-stone-600">Total Customers</p>
+                <p className="text-3xl font-bold text-ink-900">{event.totalCustomers || 0}</p>
               </div>
             </div>
           </div>
@@ -182,10 +182,10 @@ function EventDetails() {
                 <Palette className={theme.text} size={24} />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Color Theme</p>
+                <p className="text-sm text-stone-600">Color Theme</p>
                 <div className="flex items-center gap-2">
                   <div className={`w-4 h-4 rounded-full ${theme.accent}`} />
-                  <p className="text-lg font-bold text-gray-900 capitalize">{event.colorTheme}</p>
+                  <p className="text-lg font-bold text-ink-900 capitalize">{event.colorTheme}</p>
                 </div>
               </div>
             </div>
@@ -195,10 +195,10 @@ function EventDetails() {
         {/* Queues Section */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Queues</h2>
+            <h2 className="text-2xl font-bold text-ink-900">Queues</h2>
             <button
               onClick={() => navigate(`/event/${eventId}/create-queue`)}
-              className={`flex items-center gap-2 bg-gradient-to-r ${theme.gradient} text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}
+              className={`flex items-center gap-2 bg-honey-500 text-ink-900 px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all`}
             >
               <Plus size={20} />
               Create Queue
@@ -207,14 +207,13 @@ function EventDetails() {
 
           {queues.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-6xl mb-4">📋</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">No Queues Yet</h3>
-              <p className="text-gray-600 mb-6">
+              <h3 className="text-xl font-bold text-ink-800 mb-2">No Queues Yet</h3>
+              <p className="text-stone-600 mb-6">
                 Create your first queue to start managing customers!
               </p>
               <button
                 onClick={() => navigate(`/event/${eventId}/create-queue`)}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-lavender-500 to-softpink-500 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
+                className="inline-flex items-center gap-2 bg-honey-500 text-ink-900 px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all"
               >
                 <Plus size={20} />
                 Create Queue
@@ -225,32 +224,32 @@ function EventDetails() {
               {queues.map((queue) => (
                 <div
                   key={queue.id}
-                  className="border-2 border-gray-200 rounded-xl p-6 hover:border-lavender-300 hover:shadow-lg transition-all cursor-pointer"
+                  className="border-2 border-cream-200 rounded-xl p-6 hover:border-honey-300 hover:shadow-lg transition-all cursor-pointer"
                   onClick={() => navigate(`/queue/${queue.id}/manage`)}
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-bold text-gray-900">{queue.name}</h3>
+                    <h3 className="text-xl font-bold text-ink-900">{queue.name}</h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       queue.status === 'open' 
-                        ? 'bg-green-100 text-green-700'
+                        ? 'bg-sage-100 text-sage-600'
                         : 'bg-red-100 text-red-700'
                     }`}>
                       {queue.status || 'open'}
                     </span>
                   </div>
 
-                  <div className="space-y-2 text-sm text-gray-600">
+                  <div className="space-y-2 text-sm text-stone-600">
                     <div className="flex justify-between">
                       <span>Now Serving:</span>
                       <span className={`font-bold ${theme.text}`}>#{queue.currentNumber || 0}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Waiting:</span>
-                      <span className="font-bold text-softpink-600">{queue.waitingCount || 0}</span>
+                      <span className="font-bold text-sage-500">{queue.waitingCount || 0}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Completed:</span>
-                      <span className="font-bold text-gray-700">{queue.totalServed || 0}</span>
+                      <span className="font-bold text-ink-700">{queue.totalServed || 0}</span>
                     </div>
                   </div>
 
@@ -260,7 +259,7 @@ function EventDetails() {
                         e.stopPropagation();
                         navigate(`/queue/${queue.id}/manage`);
                       }}
-                      className={`flex-1 bg-gradient-to-r ${theme.gradient} text-white py-2 rounded-lg font-semibold hover:shadow-lg transition-all`}
+                      className={`flex-1 bg-honey-500 text-ink-900 py-2 rounded-lg font-semibold hover:shadow-lg transition-all`}
                     >
                       Manage Queue
                     </button>

@@ -1,93 +1,143 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from '../firebase';
-import { doc, getDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
-import { ArrowLeft, Clock, Users } from 'lucide-react';
+import { doc, getDoc, onSnapshot, updateDoc, collection, query, where } from 'firebase/firestore';
 import toast from 'react-hot-toast';
-import { getTheme } from '../utils/theme';
+import { BuzzMark, Mascot, QueueFigures } from '../components/BuzzBrand';
+import ThemeToggle from '../components/ThemeToggle';
 
 function CustomerView() {
   const { customerId } = useParams();
   const navigate = useNavigate();
-  
+
   const [customer, setCustomer] = useState(null);
-  const [queue, setQueue] = useState(null);
+  const [groupTurns, setGroupTurns] = useState([]);
+  const [queueMap, setQueueMap] = useState({});
+  const [peers, setPeers] = useState([]);
   const [event, setEvent] = useState(null);
-  const [position, setPosition] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // The turn named in the URL
   useEffect(() => {
     if (!customerId) return;
 
-    // Real-time listener for customer data
-    const unsubscribe = onSnapshot(doc(db, 'customers', customerId), async (snapshot) => {
+    const unsubscribe = onSnapshot(doc(db, 'customers', customerId), (snapshot) => {
       if (!snapshot.exists()) {
-        toast.error('Customer not found');
+        toast.error('Turn not found');
         setLoading(false);
         return;
       }
-
-      const customerData = { id: snapshot.id, ...snapshot.data() };
-      setCustomer(customerData);
-
-      // Load queue data
-      const queueDoc = await getDoc(doc(db, 'queues', customerData.queueId));
-      if (queueDoc.exists()) {
-        setQueue({ id: queueDoc.id, ...queueDoc.data() });
-
-        // Load event data
-        const eventDoc = await getDoc(doc(db, 'events', queueDoc.data().eventId));
-        if (eventDoc.exists()) {
-          setEvent({ id: eventDoc.id, ...eventDoc.data() });
-        }
-      }
-
+      setCustomer({ id: snapshot.id, ...snapshot.data() });
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [customerId]);
 
-  // Calculate position in queue
+  // Everyone who joined together in one go shares a joinGroupId
   useEffect(() => {
-    if (!customer || !queue) return;
+    const groupId = customer?.joinGroupId;
+    if (!groupId) return;
 
-    const calculatePosition = async () => {
-      const customersSnapshot = await getDoc(doc(db, 'queues', customer.queueId));
-      // This is simplified - in real implementation, query all waiting customers
-      // and count those with number < current customer number
-      
-      if (customer.status === 'waiting') {
-        const pos = customer.number - (queue.currentNumber || 0);
-        setPosition(pos > 0 ? pos : 0);
-      } else {
-        setPosition(0);
-      }
-    };
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'customers'), where('joinGroupId', '==', groupId)),
+      (snapshot) => setGroupTurns(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (error) => console.error('Error loading your other turns:', error)
+    );
 
-    calculatePosition();
-  }, [customer, queue]);
+    return () => unsubscribe();
+  }, [customer?.joinGroupId]);
 
-  const handleResponse = async (response) => {
-    if (!customer) return;
+  // Derived, never stored — avoids a second render pass just to fall back
+  const turns = !customer
+    ? []
+    : customer.joinGroupId && groupTurns.length
+    ? [...groupTurns].sort((a, b) => (a.queueId || '').localeCompare(b.queueId || ''))
+    : [customer];
 
+  const queueIdsKey = [...new Set(turns.map(t => t.queueId))].sort().join(',');
+
+  // Live queue docs for every line this person is in
+  useEffect(() => {
+    const ids = queueIdsKey ? queueIdsKey.split(',') : [];
+    if (ids.length === 0) return;
+
+    const unsubscribes = ids.map(id =>
+      onSnapshot(doc(db, 'queues', id), (snapshot) => {
+        if (snapshot.exists()) {
+          setQueueMap(prev => ({ ...prev, [id]: { id: snapshot.id, ...snapshot.data() } }));
+        }
+      })
+    );
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [queueIdsKey]);
+
+  // Everyone else in those lines, so we can count who's ahead
+  useEffect(() => {
+    const ids = queueIdsKey ? queueIdsKey.split(',') : [];
+    if (ids.length === 0) return;
+
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+
+    const byChunk = new Map();
+    const unsubscribes = chunks.map((chunk, index) =>
+      onSnapshot(
+        query(collection(db, 'customers'), where('queueId', 'in', chunk)),
+        (snapshot) => {
+          byChunk.set(index, snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+          setPeers(Array.from(byChunk.values()).flat());
+        },
+        (error) => console.error('Error loading line positions:', error)
+      )
+    );
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [queueIdsKey]);
+
+  // Event details, for the name on screen
+  useEffect(() => {
+    const eventId = customer?.eventId;
+    if (!eventId) return;
+
+    getDoc(doc(db, 'events', eventId))
+      .then(snap => {
+        if (snap.exists()) setEvent({ id: snap.id, ...snap.data() });
+      })
+      .catch(error => console.error('Error loading event:', error));
+  }, [customer?.eventId]);
+
+  const aheadOf = (turn) =>
+    peers.filter(
+      c => c.queueId === turn.queueId && c.status === 'waiting' && c.number < turn.number
+    ).length;
+
+  const waitFor = (turn) => {
+    const ahead = aheadOf(turn);
+    if (!ahead) return 'Any moment';
+    const avg = queueMap[turn.queueId]?.avgServiceTime || 5;
+    return `${ahead * avg + 2} min`;
+  };
+
+  const queueName = (turn) => queueMap[turn.queueId]?.name || 'this line';
+
+  const respond = async (turn, response) => {
     try {
       if (response === 'coming') {
-        await updateDoc(doc(db, 'customers', customerId), {
+        await updateDoc(doc(db, 'customers', turn.id), {
           status: 'coming',
           response: 'coming',
           respondedAt: new Date()
         });
-        toast.success("Great! We'll see you soon!");
-      } else if (response === 'skip') {
-        if (confirm("Are you sure you can't make it?")) {
-          await updateDoc(doc(db, 'customers', customerId), {
-            status: 'skipped',
-            response: 'skipped',
-            respondedAt: new Date()
-          });
-          toast.success("No worries! You've been removed from the queue.");
-        }
+        toast.success("Great — we'll see you soon!");
+      } else if (confirm(`Leave the ${queueName(turn)} line?`)) {
+        await updateDoc(doc(db, 'customers', turn.id), {
+          status: 'skipped',
+          response: 'skipped',
+          respondedAt: new Date()
+        });
+        toast.success('Taken out of that line.');
       }
     } catch (error) {
       console.error('Error updating response:', error);
@@ -95,192 +145,254 @@ function CustomerView() {
     }
   };
 
-  const calculateWaitTime = () => {
-    if (!queue || !position) return 'Soon!';
-    const avgTime = queue.avgServiceTime || 5;
-    const waitMinutes = position * avgTime + 2; // +2 minute buffer
-    return `${waitMinutes} min`;
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center">
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-lavender-600"></div>
-          <p className="mt-4 text-gray-600">Loading your status...</p>
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-honey-500"></div>
+          <p className="mt-4 text-stone-600">Finding your place in line...</p>
         </div>
       </div>
     );
   }
 
-  if (!customer || !queue || !event) {
+  if (!customer) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-lavender-50 to-softpink-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Not Found</h1>
-          <p className="text-gray-600">This queue entry doesn't exist or has been removed.</p>
+      <div className="min-h-screen bg-cream-100 flex items-center justify-center p-6">
+        <div className="text-center max-w-sm">
+          <Mascot className="w-32 h-auto mx-auto mb-4" />
+          <h1 className="text-2xl font-extrabold text-ink-900 mb-2">Not found</h1>
+          <p className="text-stone-600">This spot in line doesn&apos;t exist any more.</p>
         </div>
       </div>
     );
   }
 
-  const isYourTurn = customer.status === 'called';
-  const isComing = customer.status === 'coming';
-  const isSkipped = customer.status === 'skipped';
-  const isCompleted = customer.status === 'completed';
-  const theme = getTheme(event.colorTheme);
+  const name = customer.name || customer.childName || customer.parentName;
+  const live = turns.filter(t => t.status !== 'completed' && t.status !== 'skipped');
+  const called = live.filter(t => t.status === 'called');
+  const header = (
+    <header className="px-6 pt-6 flex items-center justify-center gap-2">
+      <BuzzMark size={26} textClass="text-lg" className="text-ink-900" />
+      <ThemeToggle />
+    </header>
+  );
 
-  if (isSkipped) {
+  // ---- Nothing left in any line ------------------------------------------
+  if (live.length === 0) {
+    const allDone = turns.every(t => t.status === 'completed');
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-4`}>
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
-          <div className="text-5xl mb-4">👋</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">You've Left the Queue</h1>
-          <p className="text-gray-600 mb-6">No worries! You can rejoin anytime.</p>
+      <div className="min-h-screen bg-cream-100 flex flex-col items-center justify-center p-6 text-center">
+        <Mascot className="w-40 h-auto mb-2" />
+        <h1 className="text-3xl font-extrabold text-ink-900 mb-2">
+          {allDone ? 'All done!' : 'See you next time!'}
+        </h1>
+        <p className="text-stone-600 mb-8">
+          {allDone
+            ? `Thanks for visiting ${event?.name || 'us'}.`
+            : 'You can hop back in whenever you like.'}
+        </p>
+        {event && (
           <button
             onClick={() => navigate(`/join/${event.id}`)}
-            className={`bg-gradient-to-r ${theme.gradient} text-white px-6 py-3 rounded-xl font-semibold`}
+            className="bg-honey-500 text-ink-900 px-7 py-4 rounded-2xl font-extrabold hover:bg-honey-600 transition-colors shadow-lg"
           >
-            Rejoin Queue
+            Join a line again
           </button>
-        </div>
+        )}
       </div>
     );
   }
 
-  if (isCompleted) {
-    return (
-      <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} flex items-center justify-center p-4`}>
-        <div className="bg-white rounded-2xl shadow-lg p-8 text-center max-w-md">
-          <div className="text-5xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">All Done!</h1>
-          <p className="text-gray-600">Thanks for visiting {event.name}!</p>
-        </div>
-      </div>
-    );
-  }
+  // ---- Single line: the full-screen status view ---------------------------
+  if (turns.length === 1) {
+    const turn = live[0];
+    const ahead = aheadOf(turn);
+    const isCalled = turn.status === 'called';
+    const isComing = turn.status === 'coming';
 
-  return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.gradientBg} pb-10`}>
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <button
-            onClick={() => navigate(`/join/${event.id}`)}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3"
-          >
-            <ArrowLeft size={20} />
-            <span>Back to Event</span>
-          </button>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900">{queue.name}</h1>
-            <p className="text-sm text-gray-600">{event.name}</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* Your Turn Number - BIG */}
-        <div className={`rounded-2xl shadow-xl p-8 mb-6 ${
-          isYourTurn 
-            ? 'bg-gradient-to-br from-green-400 to-green-600 animate-pulse' 
-            : 'bg-white'
-        }`}>
-          <div className="text-center">
-            <p className={`text-sm mb-2 ${isYourTurn ? 'text-white' : 'text-gray-600'}`}>
-              {isYourTurn ? "🎉 IT'S YOUR TURN!" : 'Your Number'}
-            </p>
-            <div className={`text-8xl font-bold mb-4 ${
-              isYourTurn ? 'text-white' : theme.text
-            }`}>
-              #{customer.number}
-            </div>
-            <p className={`text-lg font-semibold ${isYourTurn ? 'text-white' : 'text-gray-900'}`}>
-              {customer.childName || customer.parentName}
-            </p>
-            {customer.childName && customer.parentName && (
-              <p className={`text-sm ${isYourTurn ? 'text-white/80' : 'text-gray-600'}`}>
-                Parent: {customer.parentName}
+    if (isCalled || isComing) {
+      return (
+        <div className="min-h-screen bg-cream-100 flex flex-col">
+          {header}
+          <main className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+            <div className="w-full max-w-sm bg-honey-400 rounded-[2rem] px-6 py-10 shadow-lg">
+              <p className="text-sm font-bold uppercase tracking-[0.15em] text-honey-700 mb-2">
+                {isComing ? "You're on your way" : "It's your turn"}
               </p>
+              <p className="text-6xl font-black text-ink-900 leading-none mb-3">{turn.number}</p>
+              {name && <p className="text-lg font-bold text-ink-900">{name}</p>}
+              <p className="text-ink-700 mt-2">Come on over to {queueName(turn)}</p>
+            </div>
+
+            <Mascot className="w-36 h-auto mt-6" />
+
+            {isComing ? (
+              <p className="mt-2 text-sage-600 font-bold">✓ We know you&apos;re coming</p>
+            ) : (
+              <div className="w-full max-w-sm mt-4 space-y-3">
+                <button
+                  onClick={() => respond(turn, 'coming')}
+                  className="w-full bg-sage-400 text-ink-900 py-4 rounded-2xl font-extrabold hover:bg-sage-500 transition-colors"
+                >
+                  I&apos;ll be right there
+                </button>
+                <button
+                  onClick={() => respond(turn, 'skip')}
+                  className="w-full bg-white text-ink-700 py-4 rounded-2xl font-bold border-2 border-cream-300 hover:border-stone-400 transition-colors"
+                >
+                  I can&apos;t make it
+                </button>
+              </div>
             )}
-          </div>
+          </main>
         </div>
+      );
+    }
 
-        {/* Status Card */}
-        {!isYourTurn && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className={`text-center p-4 ${theme.bg} rounded-xl`}>
-                <p className="text-sm text-gray-600 mb-1">Now Serving</p>
-                <p className={`text-4xl font-bold ${theme.text}`}>
-                  #{queue.currentNumber || 0}
-                </p>
-              </div>
-              <div className="text-center p-4 bg-softpink-50 rounded-xl">
-                <p className="text-sm text-gray-600 mb-1">People Ahead</p>
-                <p className="text-4xl font-bold text-softpink-600">
-                  {position}
-                </p>
-              </div>
-            </div>
+    return (
+      <div className="min-h-screen bg-cream-100 flex flex-col">
+        {header}
+        <main className="flex-1 flex flex-col items-center px-6 pt-8 pb-6 text-center">
+          <h1 className="text-3xl font-extrabold text-ink-900">You&apos;re in line!</h1>
+          <p className="text-stone-500 mt-1">Thank you for waiting.</p>
 
-            <div className="flex items-center justify-center gap-2 text-gray-600 mb-2">
-              <Clock size={18} />
-              <span>Estimated wait: <strong>{calculateWaitTime()}</strong></span>
-            </div>
-
-            {isComing && (
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 text-center">
-                <p className="text-blue-700 font-semibold">✓ Marked as coming</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Response Buttons - Only show when called */}
-        {isYourTurn && !customer.response && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-            <p className="text-center text-gray-700 font-semibold mb-4">
-              Please let us know:
+          <div className="w-full max-w-sm border-t border-cream-300 mt-6 pt-8">
+            <p className="text-stone-500">Your number</p>
+            <p className="text-[5.5rem] leading-none font-black text-sage-400 my-2">
+              {turn.number}
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => handleResponse('coming')}
-                className="bg-green-500 text-white py-4 px-6 rounded-xl font-bold hover:bg-green-600 transition-all"
-              >
-                ✓ I'll Be There Soon
-              </button>
-              <button
-                onClick={() => handleResponse('skip')}
-                className="bg-red-500 text-white py-4 px-6 rounded-xl font-bold hover:bg-red-600 transition-all"
-              >
-                ✗ Can't Make It
-              </button>
-            </div>
+
+            <p className="text-stone-500 mt-6">Estimated wait time</p>
+            <p className="text-2xl font-extrabold text-ink-900 mt-1">{waitFor(turn)}</p>
+
+            <p className="text-sm text-stone-500 mt-6">
+              {ahead === 0 ? (
+                <>You&apos;re next — stay close by</>
+              ) : (
+                <>
+                  <strong className="text-ink-900">{ahead}</strong>{' '}
+                  {ahead === 1 ? 'person' : 'people'} ahead of you
+                </>
+              )}
+            </p>
           </div>
-        )}
 
-        {/* Info */}
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 text-sm text-blue-900">
-          <p className="font-semibold mb-2">💡 Tips:</p>
-          <ul className="space-y-1 ml-4">
-            <li>• Keep this page open to see live updates</li>
-            <li>• You'll see when your number is called</li>
-            <li>• Bookmark this page to check back anytime</li>
-          </ul>
-        </div>
+          <div className="flex-1" />
 
-        {/* Skip Turn Button */}
-        {customer.status === 'waiting' && (
-          <div className="mt-6">
+          <div className="w-full max-w-sm flex items-end justify-center gap-3 mt-8">
+            <QueueFigures count={ahead} />
+            <Mascot className="w-24 h-auto" />
+          </div>
+
+          <div className="w-full max-w-sm mt-6 space-y-2">
+            <p className="text-xs text-stone-500">
+              Keep this page open — it updates by itself.
+            </p>
             <button
-              onClick={() => handleResponse('skip')}
-              className="w-full py-3 text-gray-600 hover:text-gray-900 font-medium"
+              onClick={() => respond(turn, 'skip')}
+              className="w-full py-3 text-stone-600 font-semibold hover:text-ink-900 transition-colors"
             >
-              Can't make it? Skip my turn
+              Can&apos;t make it? Leave the line
             </button>
           </div>
-        )}
+        </main>
+      </div>
+    );
+  }
+
+  // ---- Several lines: one card each ---------------------------------------
+  return (
+    <div className="min-h-screen bg-cream-100 flex flex-col">
+      {header}
+
+      <main className="flex-1 w-full max-w-md mx-auto px-5 pt-6 pb-8">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-extrabold text-ink-900">
+            {called.length > 0 ? "It's your turn!" : "You're in line!"}
+          </h1>
+          <p className="text-stone-500 mt-1">
+            {called.length > 0
+              ? `${queueName(called[0])} is ready for you`
+              : `${live.length} lines · thank you for waiting.`}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {live.map(turn => {
+            const ahead = aheadOf(turn);
+            const isCalled = turn.status === 'called';
+            const isComing = turn.status === 'coming';
+
+            return (
+              <div
+                key={turn.id}
+                className={`rounded-[1.75rem] p-5 shadow-sm border-[3px] ${
+                  isCalled
+                    ? 'bg-honey-400 border-honey-500'
+                    : isComing
+                    ? 'bg-sage-100 border-sage-300'
+                    : 'bg-white border-cream-300'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-ink-900 truncate">{queueName(turn)}</p>
+                    <p className="text-sm mt-0.5 text-stone-600">
+                      {isCalled
+                        ? 'Ready for you now'
+                        : isComing
+                        ? "You said you're coming"
+                        : ahead === 0
+                        ? "You're next"
+                        : `${ahead} ${ahead === 1 ? 'person' : 'people'} ahead · ${waitFor(turn)}`}
+                    </p>
+                  </div>
+                  <p
+                    className={`text-5xl font-black leading-none shrink-0 ${
+                      isCalled ? 'text-ink-900' : 'text-sage-400'
+                    }`}
+                  >
+                    {turn.number}
+                  </p>
+                </div>
+
+                {isCalled && (
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <button
+                      onClick={() => respond(turn, 'coming')}
+                      className="bg-ink-900 text-white py-3 rounded-xl font-extrabold hover:bg-ink-700 transition-colors"
+                    >
+                      On my way
+                    </button>
+                    <button
+                      onClick={() => respond(turn, 'skip')}
+                      className="bg-white text-ink-700 py-3 rounded-xl font-bold border-2 border-cream-300 hover:border-stone-400 transition-colors"
+                    >
+                      Can&apos;t make it
+                    </button>
+                  </div>
+                )}
+
+                {!isCalled && !isComing && (
+                  <button
+                    onClick={() => respond(turn, 'skip')}
+                    className="text-sm text-stone-500 font-semibold hover:text-ink-900 transition-colors mt-3"
+                  >
+                    Leave this line
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-end justify-center mt-8">
+          <Mascot className="w-28 h-auto" />
+        </div>
+        <p className="text-xs text-stone-500 text-center mt-2">
+          Keep this page open — it updates by itself.
+        </p>
       </main>
     </div>
   );

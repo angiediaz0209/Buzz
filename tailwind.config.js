@@ -1,56 +1,55 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    darkMode: 'class',
     content: [
       "./index.html",
       "./src/**/*.{js,ts,jsx,tsx}",
     ],
     theme: {
       extend: {
+        fontFamily: {
+          sans: ['Poppins', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        },
         colors: {
-          lavender: {
-            50: '#faf5ff',
-            100: '#f3e8ff',
-            200: '#e9d5ff',
-            300: '#d8b4fe',
-            400: '#c084fc',
-            500: '#a855f7',
-            600: '#9333ea',
+          // Bee Huggie brand palette. The 500/400 honey, 900 ink, 400 sage,
+          // 500 stone and 100 cream values are sampled from the brand sheet;
+          // the neighbouring stops are derived for hover and border states.
+          honey: {
+            50: '#FEF7E6',
+            100: '#FDEFC8',
+            300: '#FEDC8A',
+            400: '#FDCA50',
+            500: '#F8B51E',
+            600: '#E09D12',
+            700: '#B87D0C',
           },
-          mint: {
-            50: '#f0fdf9',
-            100: '#ccfbef',
-            200: '#99f6e0',
-            300: '#5fe9d0',
-            400: '#2dd4bf',
-            500: '#14b8a6',
-            600: '#0d9488',
+          ink: {
+            500: '#3D515C',
+            600: '#2E404A',
+            700: '#243239',
+            800: '#1E2A31',
+            900: '#18232A',
           },
-          softpink: {
-            50: '#fdf2f8',
-            100: '#fce7f3',
-            200: '#fbcfe8',
-            300: '#f9a8d4',
-            400: '#f472b6',
-            500: '#ec4899',
-            600: '#db2777',
+          sage: {
+            100: '#E4F0EA',
+            200: '#C6E1D6',
+            300: '#A9CFC1',
+            400: '#87B9A6',
+            500: '#6BA592',
+            600: '#548C7A',
           },
-          peach: {
-            50: '#fff7ed',
-            100: '#ffedd5',
-            200: '#fed7aa',
-            300: '#fdba74',
-            400: '#fb923c',
-            500: '#f97316',
-            600: '#ea580c',
+          stone: {
+            200: '#E5E1DC',
+            300: '#CFC9C2',
+            400: '#B5B0A9',
+            500: '#9B968F',
+            600: '#7D7873',
           },
-          skyblue: {
-            50: '#f0f9ff',
-            100: '#e0f2fe',
-            200: '#bae6fd',
-            300: '#7dd3fc',
-            400: '#38bdf8',
-            500: '#0ea5e9',
-            600: '#0284c7',
+          cream: {
+            50: '#FDFAF5',
+            100: '#F9EEE3',
+            200: '#F2E3D2',
+            300: '#E8D4BE',
           },
         },
       },
