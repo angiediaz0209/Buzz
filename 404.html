@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover so the bottom tab bar can pad for the iPhone home bar -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>Buzz — your place in line</title>
+    <meta name="description" content="Your place in line, made simple. Buzz runs the queue so you can keep painting." />
+
+    <!-- Installable app shell -->
+    <link rel="manifest" href="/artistline/manifest.webmanifest" />
+    <meta name="theme-color" content="#F8B51E" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="64x64" href="/artistline/favicon-64.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/artistline/icon-192.png" />
+    <link rel="apple-touch-icon" href="/artistline/apple-touch-icon.png" />
+
+    <!-- iOS home-screen behaviour -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Buzz" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/artistline/assets/index-0woqSSvI.js"></script>
+    <link rel="stylesheet" crossorigin href="/artistline/assets/index-ByYHp2aS.css">
+  </head>
+  <body>
+    <script>
+      // Apply the saved theme before first paint so there's no light flash.
+      // Falls back to the device preference when nothing has been chosen.
+      (function () {
+        try {
+          var saved = localStorage.getItem('buzz-theme');
+          var dark = saved
+            ? saved === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', '#141d23');
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <div id="root"></div>
+  </body>
+</html>
