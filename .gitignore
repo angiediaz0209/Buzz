@@ -22,3 +22,18 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets — never commit. The Firebase *web* config in src/firebase.js is public
+# by design (it identifies the project; access is governed by firestore.rules).
+# Anything below actually grants access and must stay out of git.
+.env
+.env.*
+!.env.example
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+*.pem
+*.p12
+*.key
+
+# Firebase deploy cache (regenerated on every deploy)
+.firebase/

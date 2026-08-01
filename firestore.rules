@@ -2,73 +2,99 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- EVENTS ---
-    // Public can read (needed for join pages, kiosk, customer view)
-    // Only the owning artist can create, update, or delete
-    match /events/{eventId} {
-      allow read: if true;
-      allow create: if request.auth != null
-                    && request.resource.data.artistId == request.auth.uid;
-      allow update: if request.auth != null
-                    && resource.data.artistId == request.auth.uid;
-      allow delete: if request.auth != null
-                    && resource.data.artistId == request.auth.uid;
+    // Clients are never signed in — they scan a QR code and take a number. So
+    // writes they need can't be gated on auth; they're gated on *which fields*
+    // may change instead. That stops an anonymous visitor from closing a queue,
+    // rewinding its numbering, or renaming/renumbering somebody else's turn,
+    // while still allowing the join flow to work.
+
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // --- QUEUES ---
-    // Public can read (needed for kiosk, client join, display screen)
-    // Only the event's artist can create/delete
-    // Artist can update (status, currentNumber, etc.)
-    // Public needs to update waitingCount when joining — allowed via update
-    match /queues/{queueId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update: if true;
-      allow delete: if request.auth != null;
-    }
-
-    // --- CUSTOMERS ---
-    // Public can read (customer view, find turn, kiosk count)
-    // Public can create (kiosk and client join — unauthenticated)
-    // Public can update own doc (response: "coming")
-    // Artist can update/delete (manage queue)
-    match /customers/{customerId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if request.auth != null;
-    }
-
-    // --- USERNAMES ---
-    // Public read only (artist profile lookup)
-    // Only authenticated users can write their own
-    match /usernames/{usernameId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    // true when an update touches nothing outside `allowed`
+    function changedOnly(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
 
     // --- ARTISTS ---
-    // Public can read (artist profile page)
-    // Only the artist themselves can write
+    // Public read is needed by /artist/:username for the display name.
+    // NOTE: this also exposes the artist's email. Firestore has no field-level
+    // read rules, so hiding it means moving email to a private document.
     match /artists/{artistId} {
       allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == artistId;
+      allow write: if signedIn() && request.auth.uid == artistId;
+    }
+
+    // --- USERNAMES ---
+    // Public read powers the /artist/:username lookup.
+    match /usernames/{usernameId} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    // --- EVENTS ---
+    // Public read for join pages, kiosk, display screen and customer view.
+    // Writes are the owning artist's alone — clients never write here.
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.artistId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.artistId == request.auth.uid;
+    }
+
+    // --- QUEUES ---
+    match /queues/{queueId} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.artistId == request.auth.uid;
+      allow delete: if signedIn() && resource.data.artistId == request.auth.uid;
+
+      // The owning artist may change anything (open/close, currentNumber, counters).
+      // Everyone else may only take the next number and keep the waiting count in
+      // step — the two writes the join flow makes.
+      allow update: if (signedIn() && resource.data.artistId == request.auth.uid)
+                    || changedOnly(['lastNumber', 'waitingCount']);
+    }
+
+    // --- CUSTOMERS ---
+    // NOTE: read is public because the client status page counts who is ahead and
+    // find-my-turn searches by name or phone — both unauthenticated queries. That
+    // means customer names and phone numbers are readable by anyone who can reach
+    // the database. Closing that needs a data change, not a rule: keep contact
+    // details in a separate artist-only document and give clients a lookup code
+    // instead of searching by phone.
+    match /customers/{customerId} {
+      allow read: if true;
+
+      // A new arrival always starts as 'waiting' and must carry its identifiers.
+      allow create: if request.resource.data.keys().hasAll(['queueId', 'eventId', 'number', 'status'])
+                    && request.resource.data.status == 'waiting';
+
+      // Both sides only ever move a turn through its lifecycle: the client
+      // responding, the artist calling or completing. Name, phone, number,
+      // queueId and joinGroupId are immutable once written.
+      allow update: if changedOnly([
+                      'status', 'response', 'respondedAt',
+                      'calledAt', 'completedAt', 'lastNotificationAt'
+                    ]);
+
+      allow delete: if signedIn();
     }
 
     // --- CONTACTS ---
-    // Create only (marketing consent from kiosk/client join)
-    // No reads or updates from client — artist reads via backend/console
+    // Marketing consent captured at the kiosk: write-only from the client,
+    // readable only by the artist it belongs to.
     match /contacts/{contactId} {
       allow create: if true;
-      allow read, update, delete: if request.auth != null;
+      allow read, update, delete: if signedIn()
+                                  && resource.data.artistId == request.auth.uid;
     }
 
     // --- NOTIFICATIONS ---
-    // Only authenticated artists can create
-    // No public access
+    // Artist-only, and scoped to the artist who queued them.
     match /notifications/{notifId} {
-      allow read, write: if request.auth != null;
+      allow create: if signedIn() && request.resource.data.triggeredBy == request.auth.uid;
+      allow read, update, delete: if signedIn()
+                                  && resource.data.triggeredBy == request.auth.uid;
     }
   }
 }
