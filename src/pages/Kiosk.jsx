@@ -181,7 +181,9 @@ function Kiosk() {
         turns.push({ number: nextNumber, queueName: queue.name });
       }
   
-      // Save to contacts if consent given
+      // Save to contacts if consent given. Also best-effort — a marketing
+      // opt-in must never be the reason someone doesn't get their number.
+      try {
       if (formData.marketingConsent && formData.phone) {
         await addDoc(collection(db, 'contacts'), {
           parentName: formData.parentName || formData.childName,
@@ -195,11 +197,16 @@ function Kiosk() {
           source: 'kiosk'
         });
       }
+      } catch {
+        // consent capture failed; the join itself has already succeeded
+      }
   
-      // Update event total customers
-      await updateDoc(doc(db, 'events', eventId), {
-        totalCustomers: (event.totalCustomers || 0) + chosen.length
-      });
+      // No event write here on purpose. Clients are unauthenticated and the rules
+      // only let the owning artist update an event, so this always threw for real
+      // clients — and because it ran after the customer document was created,
+      // people were told "failed to join" while already in the line, then retried
+      // and took extra numbers. Nothing reads the counter now: EventDetails
+      // counts customer documents instead.
 
       setAssignedTurns(turns);
       setAssignedNumber(turns[0].number);

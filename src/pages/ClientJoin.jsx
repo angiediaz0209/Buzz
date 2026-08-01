@@ -141,10 +141,12 @@ function ClientJoin() {
         turns.push({ id: docRef.id, number: nextNumber, queueName: queue.name });
       }
 
-      // Update event total customers
-      await updateDoc(doc(db, 'events', eventId), {
-        totalCustomers: (event.totalCustomers || 0) + chosen.length
-      });
+      // No event write here on purpose. Clients are unauthenticated and the rules
+      // only let the owning artist update an event, so this always threw for real
+      // clients — and because it ran after the customer document was created,
+      // people were told "failed to join" while already in the line, then retried
+      // and took extra numbers. Nothing reads the counter now: EventDetails
+      // counts customer documents instead.
 
       setSuccess({ turns });
       const docRef = { id: turns[0].id };

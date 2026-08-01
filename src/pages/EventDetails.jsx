@@ -6,6 +6,7 @@ import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc
 import { ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
+import { useQueueCustomers } from '../hooks/useQueueCustomers';
 
 function EventDetails() {
   const { eventId } = useParams();
@@ -13,6 +14,7 @@ function EventDetails() {
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,6 +54,11 @@ function EventDetails() {
 
     return () => unsubscribe();
   }, [eventId, currentUser, navigate]);
+
+  // event.totalCustomers can't be trusted: the rules forbid unauthenticated
+  // clients writing to events, so client joins never increment it. Count the
+  // customer documents instead.
+  const { customers } = useQueueCustomers(queues.map(q => q.id));
 
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
@@ -171,7 +178,7 @@ function EventDetails() {
               </div>
               <div>
                 <p className="text-sm text-stone-600">Total Customers</p>
-                <p className="text-3xl font-bold text-ink-900">{event.totalCustomers || 0}</p>
+                <p className="text-3xl font-bold text-ink-900">{customers.length}</p>
               </div>
             </div>
           </div>
