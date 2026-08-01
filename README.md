@@ -16,7 +16,7 @@ around the chair, no shouting names over a festival.
 
 | Environment | URL |
 | --- | --- |
-| GitHub Pages | https://angiediaz0209.github.io/artistline/ |
+| GitHub Pages | https://angiediaz0209.github.io/Buzz/ |
 | Firebase Hosting | project `artistline-v1` |
 
 ---
@@ -267,7 +267,7 @@ on a light accent panel keeps its light-mode colours.
 ## Deployment
 
 The app runs at the **domain root** on Firebase Hosting but under
-**`/artistline/`** on GitHub Pages. Everything that needs to know the base goes
+**`/Buzz/`** on GitHub Pages. Everything that needs to know the base goes
 through [`src/utils/urls.js`](./src/utils/urls.js):
 
 | Export | Use |

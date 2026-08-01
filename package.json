@@ -1,8 +1,8 @@
 {
-  "name": "artistline",
+  "name": "buzz",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://angiediaz0209.github.io/artistline",
+  "homepage": "https://angiediaz0209.github.io/Buzz",
   "type": "module",
   "scripts": {
     "dev": "vite",
