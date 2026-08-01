@@ -15,7 +15,7 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
-import { ArrowLeft, Phone, Mail, Clock, RefreshCw, X, Undo2, Check } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, Phone, Mail, Clock, RefreshCw, X, Undo2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 function ManageQueue() {
@@ -264,6 +264,20 @@ function ManageQueue() {
     }
   };
 
+  // isVisible has existed on queues since creation but had no control after
+  // that. It decides whether clients are offered this line at all — separate
+  // from open/closed, which is whether it's currently taking people.
+  const toggleQueueVisibility = async () => {
+    const next = queue.isVisible === false;
+    try {
+      await updateDoc(doc(db, 'queues', queueId), { isVisible: next });
+      toast.success(next ? 'Clients can pick this line' : 'Hidden from clients');
+    } catch (error) {
+      console.error('Error updating visibility:', error);
+      toast.error('Failed to update visibility');
+    }
+  };
+
   const toggleQueueStatus = async () => {
     if (!queue) return;
 
@@ -325,6 +339,22 @@ function ManageQueue() {
               <p className="text-sm text-stone-600">{event.name}</p>
             </div>
 
+            <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={toggleQueueVisibility}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors border-2 ${
+                queue.isVisible === false
+                  ? 'border-cream-300 text-stone-600 hover:border-stone-400'
+                  : 'border-sage-300 bg-sage-100 text-sage-600'
+              }`}
+              title="Whether clients are offered this line on your shared link"
+            >
+              {queue.isVisible === false ? <EyeOff size={18} /> : <Eye size={18} />}
+              <span className="hidden sm:inline">
+                {queue.isVisible === false ? 'Hidden' : 'Visible'}
+              </span>
+            </button>
+
             <button
               onClick={toggleQueueStatus}
               className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
@@ -335,6 +365,7 @@ function ManageQueue() {
             >
               {queue.status === 'open' ? 'Close Queue' : 'Open Queue'}
             </button>
+            </div>
           </div>
         </div>
       </div>

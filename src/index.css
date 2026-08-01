@@ -122,41 +122,37 @@
 .dark textarea::placeholder { color: #7d776f; }
 
 /*
-  Printing a QR should produce a table sign, not a screenshot of the app.
-  The card being printed gets .print-area; everything else is hidden via
-  visibility so the printed page keeps its normal layout box.
+  Printing a QR should produce a wall sign, not a screenshot of the app.
+  PrintSign portals itself to the end of <body>; while the print dialog is up,
+  SharePage marks the body so every other top-level node — the app itself,
+  toasts — drops out and exactly one page comes out of the printer.
+
+  Anywhere else, Cmd+P still prints the page it's on, minus .print-hide chrome.
 */
+@page {
+  margin: 12mm;
+}
+
+.print-portal {
+  display: none;
+}
+
 @media print {
   body {
     background: #fff !important;
   }
 
-  body * {
-    visibility: hidden;
-  }
-
-  .print-area,
-  .print-area * {
-    visibility: visible;
-  }
-
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    border: none !important;
-    box-shadow: none !important;
-    text-align: center;
-  }
-
-  /* Screen-only chrome inside the printed card */
-  .print-hide {
+  body.printing-sign > *:not(.print-portal) {
     display: none !important;
   }
 
-  /* Sign heading that only exists on paper */
-  .print-show {
+  .printing-sign .print-portal {
     display: block !important;
+    break-inside: avoid;
+  }
+
+  /* Screen-only chrome on any page that gets printed */
+  .print-hide {
+    display: none !important;
   }
 }

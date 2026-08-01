@@ -53,6 +53,8 @@ function CreateEvent() {
         date: new Date(formData.date),
         colorTheme: formData.colorTheme,
         status: 'active',
+        // Artists control what clients see from the shared link
+        isVisible: true,
         eventType: formData.eventType || null,
         notes: formData.notes || '',
         queueCount: 0,

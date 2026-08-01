@@ -97,10 +97,14 @@ function Dashboard() {
 
   const hasLive = liveQueues.length > 0;
 
+  // Event dates are calendar days, not instants: CreateEvent stores the date
+  // input as UTC midnight. Formatting that in local time shows the previous day
+  // for anyone west of UTC, so read it back in UTC.
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString('en-US', {
+      timeZone: 'UTC',
       month: 'short',
       day: 'numeric',
       year: 'numeric'

@@ -14,13 +14,13 @@ function SharePage() {
   const [events, setEvents] = useState([]);
   const [queues, setQueues] = useState([]);
   const [artistUsername, setArtistUsername] = useState('');
+  const [artistName, setArtistName] = useState('');
   const [loading, setLoading] = useState(true);
 
   const [showKioskQR, setShowKioskQR] = useState(false);
   const [showClientQR, setShowClientQR] = useState(true);
   const [showDisplayQR, setShowDisplayQR] = useState(false);
   const [selectedDisplayEvent, setSelectedDisplayEvent] = useState(null);
-  const [selectedClientEvent, setSelectedClientEvent] = useState(null);
   const [printTarget, setPrintTarget] = useState(null);
 
   useEffect(() => {
@@ -28,7 +28,10 @@ function SharePage() {
     const loadArtist = async () => {
       try {
         const artistDoc = await getDoc(doc(db, 'artists', currentUser.uid));
-        if (artistDoc.exists()) setArtistUsername(artistDoc.data().username);
+        if (artistDoc.exists()) {
+          setArtistUsername(artistDoc.data().username);
+          setArtistName(artistDoc.data().displayName || artistDoc.data().username || '');
+        }
       } catch (error) {
         console.error('Error loading artist profile:', error);
       }
@@ -80,12 +83,19 @@ function SharePage() {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [eventIdsKey]);
 
-  // Hand off to the browser's print dialog once the card is marked printable
+  // Hand off to the browser's print dialog once the sign has mounted.
+  // The body class is what hides the rest of the app on paper (see index.css);
+  // it goes on right before print() and comes off as soon as the dialog closes.
   useEffect(() => {
     if (!printTarget) return;
     const timer = setTimeout(() => {
-      window.print();
-      setPrintTarget(null);
+      document.body.classList.add('printing-sign');
+      try {
+        window.print();
+      } finally {
+        document.body.classList.remove('printing-sign');
+        setPrintTarget(null);
+      }
     }, 80);
     return () => clearTimeout(timer);
   }, [printTarget]);
@@ -101,20 +111,21 @@ function SharePage() {
   };
 
   const activeEvents = events.filter(e => e.status === 'active');
+  // exactly what the permanent client link resolves to
+  const visibleEvents = activeEvents.filter(e => e.isVisible !== false);
 
   // Prefer the event with an open queue over merely the newest one
   const liveEventId = queues.find(q => q.status === 'open')?.eventId;
   const defaultEvent = activeEvents.find(e => e.id === liveEventId) || activeEvents[0];
 
-  const clientEvent = selectedClientEvent
-    ? activeEvents.find(e => e.id === selectedClientEvent) || defaultEvent
-    : defaultEvent;
   const displayEvent = selectedDisplayEvent
     ? activeEvents.find(e => e.id === selectedDisplayEvent) || defaultEvent
     : defaultEvent;
 
   const kioskUrl = artistUsername ? appUrl(`artist/${artistUsername}?kiosk=1`) : '';
-  const clientUrl = clientEvent ? appUrl(`join/${clientEvent.id}`) : '';
+  // Permanent: print once, never again. Resolves at scan time to whichever
+  // events the artist has left visible, so a new event needs no new QR code.
+  const clientUrl = artistUsername ? appUrl(`artist/${artistUsername}`) : '';
   const displayUrl = displayEvent ? appUrl(`display/${displayEvent.id}`) : '';
 
   const eventPicker = (tone, current, onPick) =>
@@ -167,12 +178,12 @@ function SharePage() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {clientEvent ? (
+          {artistUsername ? (
             <ShareCard
               tone="sage"
               icon={QrCode}
               audience="For clients"
-              purpose="Scan to join the line on their own phone"
+              purpose="One code for every event — print it once"
               url={clientUrl}
               openLabel="Open client join page in a new tab"
               qrOpen={showClientQR}
@@ -180,16 +191,27 @@ function SharePage() {
               onCopy={() => copyLink(clientUrl, 'Client link')}
               onPrint={() => setPrintTarget('client')}
               printing={printTarget === 'client'}
-              signTitle={clientEvent.name}
-              signHint="Scan to join the line"
-              picker={eventPicker('sage', clientEvent, setSelectedClientEvent)}
-              qrNote="Print this and put it on your table"
+              signEyebrow={artistName}
+              signHeadline="Scan to get in line"
+              signSubhead="Get your turn here — no app, no sign-up sheet."
+              signSteps={[
+                'Scan the code with your phone camera',
+                'Add your name and pick your line',
+                'Watch your turn move on your phone'
+              ]}
+              qrNote={
+                visibleEvents.length === 0
+                  ? 'No events are visible to clients right now'
+                  : visibleEvents.length === 1
+                  ? `Clients will land on ${visibleEvents[0].name}`
+                  : `Clients will choose between ${visibleEvents.length} events`
+              }
             />
           ) : (
             <SharePlaceholder
               icon={QrCode}
               audience="For clients"
-              blurb="Create an active event to get a link clients scan with their own phones to join and watch their turn live."
+              blurb="Finish setting up your profile to get the permanent link clients scan."
             />
           )}
 
@@ -205,8 +227,8 @@ function SharePage() {
             onCopy={() => copyLink(kioskUrl, 'Kiosk link')}
             onPrint={() => setPrintTarget('kiosk')}
             printing={printTarget === 'kiosk'}
-            signTitle="Get in line"
-            signHint="Tap the screen to take a number"
+            signHeadline="Open the check-in kiosk"
+            signSubhead="Scan with the iPad, then leave the page running on your table."
             qrNote="Open this on the iPad once, then leave it running"
           />
 
@@ -223,8 +245,9 @@ function SharePage() {
               onCopy={() => copyLink(displayUrl, 'Display link')}
               onPrint={() => setPrintTarget('display')}
               printing={printTarget === 'display'}
-              signTitle={displayEvent.name}
-              signHint="Now serving"
+              signEyebrow={displayEvent.name}
+              signHeadline="Open the display screen"
+              signSubhead="Scan with the TV or tablet to show the number now being served."
               picker={eventPicker('ink', displayEvent, setSelectedDisplayEvent)}
               qrNote="Scan on the TV or tablet — pick your queue there"
             />

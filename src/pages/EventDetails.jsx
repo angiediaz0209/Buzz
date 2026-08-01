@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
-import { ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
 import { useQueueCustomers } from '../hooks/useQueueCustomers';
@@ -63,12 +63,27 @@ function EventDetails() {
   const formatDate = (timestamp) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('en-US', { 
+    return date.toLocaleDateString('en-US', {
+      // Event dates are calendar days stored as UTC midnight; reading them back
+      // in local time shows the previous day west of UTC.
+      timeZone: 'UTC',
       weekday: 'long',
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric'
     });
+  };
+
+  // Controls whether this event appears on the artist's shared client link.
+  const toggleEventVisibility = async () => {
+    const next = event.isVisible === false;
+    try {
+      await updateDoc(doc(db, 'events', eventId), { isVisible: next });
+      toast.success(next ? 'Clients can see this event' : 'Hidden from clients');
+    } catch (error) {
+      console.error('Error updating visibility:', error);
+      toast.error('Failed to update visibility');
+    }
   };
 
   const closeEvent = async () => {
@@ -149,12 +164,27 @@ function EventDetails() {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={toggleEventVisibility}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors border-2 ${
+                event.isVisible === false
+                  ? 'border-cream-300 text-stone-600 hover:border-stone-400'
+                  : 'border-sage-300 bg-sage-100 text-sage-600'
+              }`}
+              title="Whether this event shows up on your shared client link"
+            >
+              {event.isVisible === false ? <EyeOff size={18} /> : <Eye size={18} />}
+              {event.isVisible === false ? 'Hidden from clients' : 'Visible to clients'}
+            </button>
+
           <button
             onClick={closeEvent}
             className="px-4 py-2 border-2 border-red-300 text-red-700 rounded-lg font-semibold hover:bg-red-50 transition-colors"
           >
             Close Event
           </button>
+          </div>
         </div>
 
         {/* Stats */}

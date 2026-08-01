@@ -1,9 +1,10 @@
 import { QrCode, Copy, ExternalLink, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { TONES } from '../utils/shareTones';
+import { PrintSign } from './PrintSign';
 
 // One share target: audience-first label, no raw URL, Copy / QR / Open.
-// `signTitle` + `signHint` are what actually get printed when Print is used.
+// The `sign*` props are the wall sign that Print produces — see PrintSign.
 export function ShareCard({
   tone,
   icon,
@@ -16,8 +17,10 @@ export function ShareCard({
   onCopy,
   onPrint,
   printing,
-  signTitle,
-  signHint,
+  signEyebrow,
+  signHeadline,
+  signSubhead,
+  signSteps,
   picker,
   qrNote
 }) {
@@ -25,12 +28,20 @@ export function ShareCard({
   const Icon = icon;
 
   return (
-    <div
-      className={`bg-white rounded-2xl shadow-lg p-5 border-2 border-cream-200 ${
-        printing ? 'print-area' : ''
-      }`}
-    >
-      <div className="print-hide">
+    <div className="bg-white rounded-2xl shadow-lg p-5 border-2 border-cream-200">
+      {/* Mounted only while this card is the one being printed */}
+      {printing && (
+        <PrintSign
+          eventName={signEyebrow}
+          headline={signHeadline}
+          subhead={signSubhead}
+          steps={signSteps}
+          url={url}
+          qrFg={t.qrFg}
+        />
+      )}
+
+      <div>
         <div className="flex items-start gap-2 mb-4">
           <div className={`p-2 ${t.iconBg} rounded-lg shrink-0`}>
             <Icon size={18} className={t.iconText} />
@@ -76,21 +87,15 @@ export function ShareCard({
       </div>
 
       {qrOpen && (
-        <div className="mt-4 pt-4 border-t border-cream-200 text-center print-sign">
-          {/* Only shows on paper — turns the QR into a table sign */}
-          <div className="hidden print-show mb-6">
-            <h2 className="text-3xl font-bold">{signTitle}</h2>
-            <p className="text-lg mt-2">{signHint}</p>
-          </div>
+        <div className="mt-4 pt-4 border-t border-cream-200 text-center">
+          <QRCodeSVG value={url} size={200} level="H" marginSize={4} fgColor={t.qrFg} />
 
-          <QRCodeSVG value={url} size={200} level="H" includeMargin={true} fgColor={t.qrFg} />
-
-          {qrNote && <p className="text-stone-400 text-xs mt-2 print-hide">{qrNote}</p>}
+          {qrNote && <p className="text-stone-400 text-xs mt-2">{qrNote}</p>}
 
           {onPrint && (
             <button
               onClick={onPrint}
-              className={`mt-3 flex items-center justify-center gap-2 text-sm font-medium mx-auto transition-colors print-hide ${t.link}`}
+              className={`mt-3 flex items-center justify-center gap-2 text-sm font-medium mx-auto transition-colors ${t.link}`}
             >
               <Printer size={14} />
               Print this sign

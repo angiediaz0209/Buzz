@@ -53,11 +53,11 @@ function ArtistProfile() {
         if (!artistDoc.empty) {
           setArtist({ id: userId, ...artistDoc.docs[0].data() });
 
-          // Load active events for this artist
+          // What clients see is the artist's explicit choice: an active event
+          // that hasn't been hidden. There is deliberately no date filter — it
+          // used to compare a UTC-midnight event date against local midnight,
+          // which hid an event on its own day for anyone west of UTC.
           const eventsRef = collection(db, 'events');
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-
           const q = query(
             eventsRef,
             where('artistId', '==', userId),
@@ -67,14 +67,9 @@ function ArtistProfile() {
 
           const unsubscribe = onSnapshot(q, (snapshot) => {
             const eventsData = snapshot.docs
-              .map(doc => ({
-                id: doc.id,
-                ...doc.data()
-              }))
-              .filter(event => {
-                const eventDate = event.date.toDate ? event.date.toDate() : new Date(event.date);
-                return eventDate >= today;
-              });
+              .map(doc => ({ id: doc.id, ...doc.data() }))
+              // legacy events predate the flag, so only an explicit false hides one
+              .filter(event => event.isVisible !== false);
 
             setEvents(eventsData);
             setLoading(false);
