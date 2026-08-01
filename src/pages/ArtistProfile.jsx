@@ -23,6 +23,8 @@ function ArtistProfile() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(location.state?.returnToChoice ? 'choice' : 'welcome');
+  // Which button brought them to the event picker: 'join' or 'find'.
+  const [intent, setIntent] = useState('join');
 
   // Kiosk mode is enabled via ?kiosk=1 in the URL (set once on the iPad)
   const isKiosk = new URLSearchParams(location.search).get('kiosk') === '1';
@@ -139,11 +141,12 @@ function ArtistProfile() {
   // Choice screen — take a number, or look up one you already have
   if (step === 'choice') {
     return (
+      // No artist name here on purpose — a client scanning a code already knows
+      // whose table they are standing at, and the two buttons are the whole point.
       <TurnChoice
-        title={artist.displayName || artist.username}
-        subtitle="What would you like to do?"
         onBack={() => setStep('welcome')}
         onGetTurn={() => {
+          setIntent('join');
           if (events.length === 1) {
             navigate(`/join/${events[0].id}`, {
               state: { artistUsername: username, kiosk: isKiosk }
@@ -153,6 +156,7 @@ function ArtistProfile() {
           }
         }}
         onFindTurn={() => {
+          setIntent('find');
           if (events.length === 1) {
             navigate(`/event/${events[0].id}/find`, {
               state: { artistUsername: username, kiosk: isKiosk }
@@ -186,16 +190,25 @@ function ArtistProfile() {
           </div>
         ) : (
           <div className="space-y-4">
-            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">Choose an event</h2>
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-4">
+              {intent === 'find' ? 'Which event are you in line for?' : 'Choose an event'}
+            </h2>
             {events.map((event) => (
               <button
                 key={event.id}
-                onClick={() => navigate(`/join/${event.id}`)}
+                onClick={() =>
+                  navigate(
+                    intent === 'find' ? `/event/${event.id}/find` : `/join/${event.id}`,
+                    { state: { artistUsername: username, kiosk: isKiosk } }
+                  )
+                }
                 className="w-full bg-white hover:border-honey-400 border-2 border-cream-300 rounded-2xl p-6 text-left transition-colors shadow-sm"
               >
                 <div className="flex justify-between items-center">
                   <h3 className="text-xl font-extrabold text-ink-900">{event.name}</h3>
-                  <span className="text-sm font-bold text-honey-700">Join →</span>
+                  <span className="text-sm font-bold text-honey-700">
+                    {intent === 'find' ? 'Find →' : 'Join →'}
+                  </span>
                 </div>
               </button>
             ))}

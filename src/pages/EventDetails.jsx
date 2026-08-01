@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { doc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { Eye, EyeOff, ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
@@ -20,31 +20,32 @@ function EventDetails() {
   useEffect(() => {
     if (!eventId || !currentUser) return;
 
-    const loadEvent = async () => {
-      try {
-        const eventDoc = await getDoc(doc(db, 'events', eventId));
-        if (eventDoc.exists()) {
-          const eventData = { id: eventDoc.id, ...eventDoc.data() };
-          setEvent(eventData);
+    // Live, not a one-shot read: this page owns the visibility and close
+    // toggles, so a stale copy makes a successful write look like it failed —
+    // the button keeps its old label and the next click undoes the change.
+    const unsubEvent = onSnapshot(
+      doc(db, 'events', eventId),
+      (snap) => {
+        if (snap.exists()) {
+          setEvent({ id: snap.id, ...snap.data() });
         } else {
           toast.error('Event not found');
           navigate('/dashboard');
         }
-      } catch (error) {
+        setLoading(false);
+      },
+      (error) => {
         console.error('Error loading event:', error);
         toast.error('Failed to load event');
-      } finally {
         setLoading(false);
       }
-    };
-
-    loadEvent();
+    );
 
     // Real-time listener for queues
     const queuesRef = collection(db, 'queues');
     const q = query(queuesRef, where('eventId', '==', eventId));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubQueues = onSnapshot(q, (snapshot) => {
       const queuesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -52,7 +53,10 @@ function EventDetails() {
       setQueues(queuesData);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubEvent();
+      unsubQueues();
+    };
   }, [eventId, currentUser, navigate]);
 
   // event.totalCustomers can't be trusted: the rules forbid unauthenticated

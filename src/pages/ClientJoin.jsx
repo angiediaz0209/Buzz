@@ -13,7 +13,7 @@ import {
     onSnapshot,
     runTransaction
   } from 'firebase/firestore';
-import { Users, ArrowLeft, CheckCircle, Check } from 'lucide-react';
+import { Users, ArrowLeft, CheckCircle, Check, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
 import TurnChoice from '../components/TurnChoice';
@@ -357,7 +357,15 @@ function ClientJoin() {
           </div>
         ) : (
           /* Join form — one name and phone covers every chosen line */
-          <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+          <>
+            <div className="mb-5">
+              <h2 className="text-2xl font-extrabold text-ink-900">Get in line</h2>
+              <p className="text-stone-600 mt-1">
+                Add your name and we&apos;ll save your spot.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
             {queues.length > 1 && (
               <div className="mb-5 pb-5 border-b border-cream-200">
                 <p className="text-sm text-stone-600 mb-1">Getting a number in</p>
@@ -411,8 +419,29 @@ function ClientJoin() {
               >
                 {submitting ? 'Joining...' : chosenQueues.length > 1 ? `Get my ${chosenQueues.length} numbers` : 'Get my turn'}
               </button>
-            </form>
-          </div>
+              </form>
+            </div>
+
+            {/* People who already took a number often re-scan the code to check
+                it — without this they take a second number instead. */}
+            <button
+              type="button"
+              onClick={() =>
+                navigate(`/event/${eventId}/find`, {
+                  state: {
+                    artistUsername: location.state?.artistUsername,
+                    kiosk: location.state?.kiosk
+                  }
+                })
+              }
+              className="w-full mt-5 py-4 rounded-2xl font-bold text-lg bg-white border-[3px] border-cream-300
+                         text-ink-900 hover:border-sage-400 active:border-sage-400 transition-colors
+                         flex items-center justify-center gap-2"
+            >
+              <Search size={20} className="text-sage-500" />
+              I already have a turn
+            </button>
+          </>
         )}
       </main>
     </div>
