@@ -2,17 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../firebase';
 import {
-    doc,
-    getDoc,
-    collection,
-    query,
-    where,
-    addDoc,
-    updateDoc,
-    serverTimestamp,
-    onSnapshot,
-    runTransaction
-  } from 'firebase/firestore';
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  increment,
+  serverTimestamp,
+  onSnapshot,
+  runTransaction
+} from 'firebase/firestore';
 import { Users, ArrowLeft, CheckCircle, Check, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
@@ -93,14 +92,50 @@ function ClientJoin() {
     });
   };
 
-  const getNextNumber = async (queueId) => {
-    const queueRef = doc(db, 'queues', queueId);
-    return await runTransaction(db, async (transaction) => {
+  // Everything one line needs, in a single transaction.
+  //
+  // This used to be four sequential network round trips per line — a
+  // transaction to take a number, an addDoc for the customer, then an updateDoc
+  // for the waiting count — and the caller awaited each line before starting
+  // the next, so three lines cost twelve trips in series. On venue wifi that's
+  // the several seconds people spent staring at "Joining...".
+  //
+  // Folding the writes into the transaction that already reads the queue also
+  // fixes a real counting bug: waitingCount was computed from the local
+  // snapshot, so two people joining at the same moment both wrote the same
+  // value and the count drifted. increment() is resolved server-side and can't
+  // drift.
+  const joinOneLine = async (queue, joinGroupId) => {
+    const queueRef = doc(db, 'queues', queue.id);
+    // Generating the ref locally costs no round trip, so the customer document
+    // can be written inside the transaction instead of after it.
+    const customerRef = doc(collection(db, 'customers'));
+
+    const number = await runTransaction(db, async (transaction) => {
       const queueSnap = await transaction.get(queueRef);
       const next = (queueSnap.data().lastNumber || 0) + 1;
-      transaction.update(queueRef, { lastNumber: next });
+
+      transaction.update(queueRef, {
+        lastNumber: next,
+        waitingCount: increment(1)
+      });
+
+      transaction.set(customerRef, {
+        queueId: queue.id,
+        eventId: eventId,
+        number: next,
+        name: formData.name,
+        phone: formData.phone,
+        status: 'waiting',
+        response: null,
+        joinGroupId,
+        joinedAt: serverTimestamp()
+      });
+
       return next;
     });
+
+    return { id: customerRef.id, number, queueName: queue.name };
   };
 
   const handleSubmit = async (e) => {
@@ -117,29 +152,13 @@ function ClientJoin() {
     try {
       // Ties this person's turns together so their status page can show them all
       const joinGroupId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const turns = [];
 
-      for (const queue of chosen) {
-        const nextNumber = await getNextNumber(queue.id);
-
-        const docRef = await addDoc(collection(db, 'customers'), {
-          queueId: queue.id,
-          eventId: eventId,
-          number: nextNumber,
-          name: formData.name,
-          phone: formData.phone,
-          status: 'waiting',
-          response: null,
-          joinGroupId,
-          joinedAt: serverTimestamp()
-        });
-
-        await updateDoc(doc(db, 'queues', queue.id), {
-          waitingCount: (queue.waitingCount || 0) + 1
-        });
-
-        turns.push({ id: docRef.id, number: nextNumber, queueName: queue.name });
-      }
+      // Lines are independent — each has its own numbering — so they go at once
+      // rather than one after another. Joining three lines now costs what
+      // joining one costs.
+      const turns = await Promise.all(
+        chosen.map(queue => joinOneLine(queue, joinGroupId))
+      );
 
       // No event write here on purpose. Clients are unauthenticated and the rules
       // only let the owning artist update an event, so this always threw for real
