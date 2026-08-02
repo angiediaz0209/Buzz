@@ -11,10 +11,17 @@ import { useQueueCustomers, customerName } from '../hooks/useQueueCustomers';
 function Dashboard() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [events, setEvents] = useState([]);
+  const [ownedEvents, setOwnedEvents] = useState([]);
+  // Events belonging to another artist that this artist has a line on. Found via
+  // their own queues, because the events query can only match events they own.
+  // Kept as a map and filtered at render, so dropping a shared event needs no
+  // synchronous reset inside an effect.
+  const [guestEventMap, setGuestEventMap] = useState({});
   const [queues, setQueues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [artistName, setArtistName] = useState('');
+
+
 
   // Load artist profile
   useEffect(() => {
@@ -48,12 +55,62 @@ function Dashboard() {
         id: doc.id,
         ...doc.data()
       }));
-      setEvents(eventsData);
+      setOwnedEvents(eventsData);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [currentUser]);
+
+  // Events this artist has a line on but doesn't own. The events collection can
+  // only be queried by artistId, so these are discovered through their queues.
+  const [guestEventIdsKey, setGuestEventIdsKey] = useState('');
+  const ownedIdsKey = ownedEvents.map(e => e.id).sort().join(',');
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, 'queues'), where('artistId', '==', currentUser.uid)),
+      (snapshot) => {
+        const owned = new Set(ownedIdsKey ? ownedIdsKey.split(',') : []);
+        const ids = [
+          ...new Set(
+            snapshot.docs
+              .map(d => d.data().eventId)
+              .filter(id => id && !owned.has(id))
+          )
+        ].sort();
+        setGuestEventIdsKey(ids.join(','));
+      },
+      (error) => console.error('Error finding shared events:', error)
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, ownedIdsKey]);
+
+  useEffect(() => {
+    const ids = guestEventIdsKey ? guestEventIdsKey.split(',') : [];
+    if (ids.length === 0) return;
+
+    const unsubscribes = ids.map(id =>
+      onSnapshot(doc(db, 'events', id), (snap) => {
+        if (!snap.exists()) return;
+        setGuestEventMap(prev => ({
+          ...prev,
+          [id]: { id: snap.id, ...snap.data(), isGuest: true }
+        }));
+      })
+    );
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [guestEventIdsKey]);
+
+  const guestEvents = (guestEventIdsKey ? guestEventIdsKey.split(',') : [])
+    .map(id => guestEventMap[id])
+    .filter(Boolean);
+
+  const events = [...ownedEvents, ...guestEvents];
 
   // Stable key so we only resubscribe when the set of events actually changes
   const eventIdsKey = events.map(e => e.id).sort().join(',');
@@ -309,6 +366,11 @@ function Dashboard() {
                     <div className="flex items-start justify-between gap-2 mb-4">
                       <h3 className="text-xl font-bold text-ink-800 flex-1 min-w-0">
                         {event.name}
+                        {event.isGuest && (
+                          <span className="ml-2 align-middle text-xs font-bold text-honey-700 bg-honey-100 rounded-full px-2 py-0.5">
+                            Shared with you
+                          </span>
+                        )}
                       </h3>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 ${
                         event.status === 'active'
@@ -368,6 +430,7 @@ function Dashboard() {
                     <div className="mt-4 flex items-center gap-3">
                       <div className={`h-2 flex-1 rounded-full ${getTheme(event.colorTheme).accent}`} />
                       <button
+                        hidden={event.isGuest}
                         onClick={(e) => handleDeleteEvent(e, event)}
                         className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title={`Delete ${event.name}`}

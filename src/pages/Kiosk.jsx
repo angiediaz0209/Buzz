@@ -197,7 +197,9 @@ function Kiosk() {
           parentName: formData.parentName || formData.childName,
           phone: formData.phone || '',
           email: '',
-          artistId: event.artistId,
+          // The artist running the line they joined — not the event's host, who
+          // may be a different artist entirely once guest lines are in play.
+          artistId: chosen[0]?.artistId || event.artistId,
           eventId: eventId,
           eventType: event.eventType || 'other',
           consentDate: serverTimestamp(),

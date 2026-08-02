@@ -17,6 +17,12 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
 
+    // The event a queue sits on. Costs a document read per evaluation, so it is
+    // only used on queue create/delete — never on the join path.
+    function eventOf(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
     // --- ARTISTS ---
     // Public read is needed by /artist/:username for the display name.
     // NOTE: this also exposes the artist's email. Firestore has no field-level
@@ -45,8 +51,28 @@ service cloud.firestore {
     // --- QUEUES ---
     match /queues/{queueId} {
       allow read: if true;
-      allow create: if signedIn() && request.resource.data.artistId == request.auth.uid;
-      allow delete: if signedIn() && resource.data.artistId == request.auth.uid;
+
+      // A queue always belongs to whoever created it. You may add one to your own
+      // event freely; adding one to someone else's requires that they have
+      // explicitly opened the event up with allowGuestLines. Event ids travel in
+      // the client join URL, so they are not secret — without this gate any
+      // signed-in artist who saw a code could attach a line to that event.
+      // get(key, default) rather than .allowGuestLines — events created before
+      // this flag existed don't have the field, and reading a missing key errors
+      // the rule instead of evaluating false.
+      allow create: if signedIn()
+                    && request.resource.data.artistId == request.auth.uid
+                    && (
+                         eventOf(request.resource.data.eventId).artistId == request.auth.uid
+                         || eventOf(request.resource.data.eventId).get('allowGuestLines', false) == true
+                       );
+
+      // The queue's own artist, or the artist whose event it sits on — otherwise a
+      // host could not tidy up a guest line left on their own event.
+      allow delete: if signedIn() && (
+                      resource.data.artistId == request.auth.uid
+                      || eventOf(resource.data.eventId).artistId == request.auth.uid
+                    );
 
       // The owning artist may change anything (open/close, currentNumber, counters).
       // Everyone else may only take the next number and keep the waiting count in

@@ -55,6 +55,8 @@ function CreateEvent() {
         status: 'active',
         // Artists control what clients see from the shared link
         isVisible: true,
+        // Guests can only add a line once the host explicitly allows it.
+        allowGuestLines: false,
         eventType: formData.eventType || null,
         notes: formData.notes || '',
         queueCount: 0,

@@ -16,7 +16,10 @@ import {
   serverTimestamp,
   writeBatch
 } from 'firebase/firestore';
-import { Eye, EyeOff, ArrowLeft, Phone, Mail, Clock, RefreshCw, X, Undo2, Check } from 'lucide-react';
+import {
+  Eye, EyeOff, ArrowLeft, Phone, Clock, RefreshCw, X, Undo2, Check,
+  ChevronRight, ChevronDown
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 function ManageQueue() {
@@ -47,6 +50,17 @@ function ManageQueue() {
         }
 
         const queueData = { id: queueDoc.id, ...queueDoc.data() };
+
+        // Only the artist who owns a line may work it. Guest artists share an
+        // event, not each other's queues — and every write here would be
+        // rejected by the rules anyway, so failing early beats a page of
+        // buttons that silently don't work.
+        if (queueData.artistId && queueData.artistId !== currentUser.uid) {
+          toast.error("That line belongs to another artist");
+          navigate(`/event/${queueData.eventId}`);
+          return;
+        }
+
         setQueue(queueData);
         setLoading(false);
 
@@ -348,293 +362,293 @@ function ManageQueue() {
   const servingCustomers = [...calledCustomers, ...comingCustomers];
 
   return (
-    <div className="min-h-screen bg-cream-100 pb-20">
-      {/* Queue Controls */}
-      <div className="bg-white shadow-sm border-b border-cream-200 sticky top-14 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3">
-          <button
-            onClick={() => navigate(`/event/${event.id}`)}
-            className="flex items-center gap-2 text-stone-600 hover:text-ink-900 transition-colors text-sm mb-2"
-          >
-            <ArrowLeft size={16} />
-            <span>Back to Event</span>
-          </button>
-
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-ink-900">{queue.name}</h1>
-              <p className="text-sm text-stone-600">{event.name}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
+    <div className="min-h-screen bg-cream-100">
+      {/* One line carries the name, the state and the counts. The three stat
+          tiles that used to sit here repeated the section headings below them,
+          and cost a third of the screen on a phone. */}
+      <div className="bg-white shadow-sm border-b border-cream-200 sticky top-14 z-30">
+        <div className="max-w-4xl mx-auto px-4 py-2.5">
+          <div className="flex items-center gap-2">
             <button
-              onClick={toggleQueueVisibility}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors border-2 ${
-                queue.isVisible === false
-                  ? 'border-cream-300 text-stone-600 hover:border-stone-400'
-                  : 'border-sage-300 bg-sage-100 text-sage-600'
-              }`}
-              title="Whether clients are offered this line on your shared link"
+              onClick={() => navigate(`/event/${event.id}`)}
+              className="text-stone-500 hover:text-ink-900 transition-colors shrink-0"
+              aria-label="Back to event"
+              title="Back to event"
             >
-              {queue.isVisible === false ? <EyeOff size={18} /> : <Eye size={18} />}
-              <span className="hidden sm:inline">
-                {queue.isVisible === false ? 'Hidden' : 'Visible'}
-              </span>
+              <ArrowLeft size={18} />
             </button>
 
-            <button
-              onClick={toggleQueueStatus}
-              className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
-                queue.status === 'open'
-                  ? 'bg-sage-100 text-sage-600 hover:bg-green-200'
-                  : 'bg-red-100 text-red-700 hover:bg-red-200'
-              }`}
-            >
-              {queue.status === 'open' ? 'Close Queue' : 'Open Queue'}
-            </button>
+            <h1 className="text-lg font-extrabold text-ink-900 truncate">{queue.name}</h1>
+            <span className="text-xs text-stone-500 truncate hidden sm:inline">{event.name}</span>
+
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={toggleQueueVisibility}
+                className={`p-1.5 rounded-full transition-colors ${
+                  queue.isVisible === false
+                    ? 'text-stone-400 hover:text-stone-600 hover:bg-cream-100'
+                    : 'text-sage-600 hover:bg-sage-100'
+                }`}
+                title={
+                  queue.isVisible === false
+                    ? 'Hidden — clients are not offered this line'
+                    : 'Clients can pick this line'
+                }
+                aria-label={
+                  queue.isVisible === false ? 'Show this line to clients' : 'Hide this line from clients'
+                }
+              >
+                {queue.isVisible === false ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+
+              {/* The pill states what the line is doing; tapping it flips that */}
+              <button
+                onClick={toggleQueueStatus}
+                className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${
+                  queue.status === 'open'
+                    ? 'bg-sage-100 text-sage-600 hover:bg-sage-200'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                }`}
+                title={queue.status === 'open' ? 'Tap to stop taking people' : 'Tap to start taking people'}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    queue.status === 'open' ? 'bg-sage-500' : 'bg-red-500'
+                  }`}
+                />
+                {queue.status === 'open' ? 'Open' : 'Closed'}
+              </button>
             </div>
           </div>
+
+          <p className="text-xs text-stone-500 mt-1">
+            {/* Who's actually in the chair — currentNumber keeps the last number
+                called even after that person is done */}
+            Serving{' '}
+            <span className="font-bold text-ink-900">
+              {servingCustomers[0] ? `#${servingCustomers[0].number}` : '—'}
+            </span>
+            <span className="mx-1.5">·</span>
+            <span className="font-bold text-ink-900">{waitingCustomers.length}</span> waiting
+            <span className="mx-1.5">·</span>
+            <span className="font-bold text-ink-900">{completedCustomers.length}</span> done
+          </p>
         </div>
       </div>
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-stone-600">Now Serving</p>
-            <p className="text-3xl font-bold text-ink-900">
-              {/* Who's actually in the chair — currentNumber keeps the last
-                  number called even after that person is done */}
-              {servingCustomers[0] ? `#${servingCustomers[0].number}` : '—'}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-stone-600">Waiting</p>
-            <p className="text-3xl font-bold text-sage-500">
-              {waitingCustomers.length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4 text-center">
-            <p className="text-sm text-stone-600">Completed</p>
-            <p className="text-3xl font-bold text-ink-700">
-              {completedCustomers.length}
-            </p>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 mb-6">
-          <button
-            onClick={callNextNumber}
-            disabled={waitingCustomers.length === 0}
-            className="flex-1 bg-honey-500 text-ink-900 py-5 rounded-xl font-bold text-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+      {/* Bottom padding clears the action bar, which is fixed above the mobile
+          tab bar on phones and against the window edge from md up. */}
+      <main className="max-w-4xl mx-auto px-4 pt-3 pb-32 md:pb-28">
+        {servingCustomers.map((customer) => (
+          <div
+            key={customer.id}
+            className={`rounded-xl px-4 py-3 mb-3 border-2 ${
+              customer.status === 'coming'
+                ? 'bg-blue-50 border-sage-300'
+                : 'bg-sage-100 border-sage-300'
+            }`}
           >
-            {servingCustomers.length > 0 ? 'Next Number' : 'Call First Number'}
-          </button>
-          <button
-            onClick={goBack}
-            disabled={completedCustomers.length === 0}
-            className="px-5 py-5 bg-white border-2 border-cream-300 text-ink-700 rounded-xl font-semibold hover:bg-cream-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Undo last call"
-          >
-            <Undo2 size={24} />
-          </button>
-        </div>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold text-sage-600 tabular-nums shrink-0">
+                #{customer.number}
+              </span>
 
-        {/* Currently Serving */}
-        {servingCustomers.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-ink-900 mb-3">Currently Serving</h2>
-            {servingCustomers.map((customer) => (
-              <div
-                key={customer.id}
-                className={`rounded-xl p-4 mb-3 ${
-                  customer.status === 'coming'
-                    ? 'bg-blue-50 border-2 border-sage-300'
-                    : 'bg-sage-100 border-2 border-sage-300'
-                }`}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`text-3xl font-bold ${
-                        customer.status === 'coming' ? 'text-sage-600' : 'text-sage-600'
-                      }`}>
-                        #{customer.number}
-                      </span>
-                      <div>
-                        <p className="font-bold text-ink-900">
-                          {customer.name || customer.childName || customer.parentName}
-                        </p>
-                        {customer.childName && customer.parentName && (
-                          <p className="text-sm text-stone-600">Parent: {customer.parentName}</p>
-                        )}
-                        {customer.status === 'coming' && (
-                          <p className="text-xs text-sage-600 font-semibold mt-1">On their way</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {customer.phone && (
-                      <div className="flex items-center gap-2 text-sm text-stone-600">
-                        <Phone size={14} />
-                        <span>{customer.phone}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => completeCustomer(customer)}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-sage-500 text-white rounded-lg text-sm font-semibold hover:bg-sage-600 transition-colors"
-                      title="Mark as done"
-                    >
-                      <Check size={16} />
-                      Done
-                    </button>
-                    <button
-                      onClick={() => resendNotification(customer)}
-                      className="px-3 py-2 bg-sage-100 text-sage-600 rounded-lg text-sm font-medium hover:bg-sage-200"
-                      title="Resend notification"
-                      aria-label="Resend notification"
-                    >
-                      <RefreshCw size={16} />
-                    </button>
-                  </div>
-                </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-ink-900 truncate">
+                  {customer.name || customer.childName || customer.parentName}
+                </p>
+                <p className="text-xs text-stone-600 truncate">
+                  {customer.status === 'coming' && (
+                    <span className="text-sage-600 font-semibold">On their way</span>
+                  )}
+                  {customer.status === 'coming' && customer.phone && ' · '}
+                  {customer.phone}
+                  {customer.childName && customer.parentName && ` · Parent: ${customer.parentName}`}
+                </p>
               </div>
+
+              <button
+                onClick={() => resendNotification(customer)}
+                className="p-2 bg-white/70 text-sage-600 rounded-lg hover:bg-white transition-colors shrink-0"
+                title="Resend notification"
+                aria-label="Resend notification"
+              >
+                <RefreshCw size={16} />
+              </button>
+              <button
+                onClick={() => completeCustomer(customer)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-sage-500 text-white rounded-lg text-sm font-bold hover:bg-sage-600 transition-colors shrink-0"
+                title="Mark as done"
+              >
+                <Check size={16} />
+                Done
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {waitingCustomers.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center">
+            <p className="text-stone-500">No one waiting</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {waitingCustomers.map((customer, index) => (
+              <WaitingRow
+                key={customer.id}
+                customer={customer}
+                isNext={index === 0}
+                joinedAt={formatTime(customer.joinedAt)}
+                onRemove={() => removeCustomer(customer)}
+              />
             ))}
           </div>
         )}
 
-        {/* Waiting Queue */}
-        <div className="mb-6">
-          <h2 className="text-lg font-bold text-ink-900 mb-3">
-            Waiting ({waitingCustomers.length})
-          </h2>
+        {/* History, out of the way. It used to render every person served, so a
+            busy day buried the live list under dozens of finished rows. */}
+        {(completedCustomers.length > 0 || skippedCustomers.length > 0) && (
+          <div className="mt-4">
+            {completedCustomers.length > 0 && (
+              <Disclosure label="completed" count={completedCustomers.length}>
+                {completedCustomers.map((customer) => (
+                  <PastRow key={customer.id} customer={customer} />
+                ))}
+              </Disclosure>
+            )}
 
-          {waitingCustomers.length === 0 ? (
-            <div className="bg-white rounded-xl p-8 text-center">
-              <p className="text-stone-500">No customers waiting</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {waitingCustomers.map((customer, index) => (
-                <div
-                  key={customer.id}
-                  className="bg-white rounded-xl p-4 shadow hover:shadow-md transition-shadow"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-start gap-3 flex-1">
-                      <span className="text-2xl font-bold text-ink-900">
-                        #{customer.number}
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-semibold text-ink-900">
-                          {customer.name || customer.childName || customer.parentName}
-                        </p>
-                        {customer.childName && customer.parentName && (
-                          <p className="text-sm text-stone-600">Parent: {customer.parentName}</p>
-                        )}
-
-                        <div className="flex flex-wrap gap-3 mt-2 text-xs text-stone-500">
-                          {customer.phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone size={12} />
-                              <span>{customer.phone}</span>
-                            </div>
-                          )}
-                          {customer.joinedAt && (
-                            <div className="flex items-center gap-1">
-                              <Clock size={12} />
-                              <span>Joined {formatTime(customer.joinedAt)}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {index === 0 && (
-                          <p className="text-xs text-sage-600 font-semibold mt-2">
-                            Next in line
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => removeCustomer(customer)}
-                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      title="Remove from queue"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Didn't Show */}
-        {skippedCustomers.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-bold text-stone-500 mb-3">
-              Didn't Show ({skippedCustomers.length})
-            </h2>
-            <div className="space-y-2">
-              {skippedCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="bg-cream-50 border border-cream-200 rounded-xl p-3"
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-stone-400">
-                        #{customer.number}
-                      </span>
-                      <div>
-                        <p className="text-sm text-stone-500">
-                          {customer.name || customer.childName || customer.parentName}
-                        </p>
-                        {customer.childName && customer.parentName && (
-                          <p className="text-xs text-stone-400">Parent: {customer.parentName}</p>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-xs text-stone-400">Said no</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Completed */}
-        {completedCustomers.length > 0 && (
-          <div>
-            <h2 className="text-lg font-bold text-stone-500 mb-3">
-              Completed ({completedCustomers.length})
-            </h2>
-            <div className="space-y-2">
-              {completedCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="bg-cream-50 border border-cream-200 rounded-xl p-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-stone-400">
-                      #{customer.number}
-                    </span>
-                    <p className="text-sm text-stone-500">
-                      {customer.name || customer.childName || customer.parentName}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {skippedCustomers.length > 0 && (
+              <Disclosure label="didn't show" count={skippedCustomers.length}>
+                {skippedCustomers.map((customer) => (
+                  <PastRow key={customer.id} customer={customer} note="Said no" />
+                ))}
+              </Disclosure>
+            )}
           </div>
         )}
       </main>
+
+      {/* The one control that gets pressed all night, always in thumb reach.
+          The offset clears the mobile tab bar; from md up there isn't one. */}
+      <div className="fixed left-0 right-0 z-40 bottom-[calc(3.9rem+env(safe-area-inset-bottom))] md:bottom-0 bg-white border-t border-cream-200">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex gap-3">
+          <button
+            onClick={callNextNumber}
+            disabled={waitingCustomers.length === 0}
+            className="flex-1 bg-honey-500 text-ink-900 py-4 rounded-xl font-extrabold text-lg shadow hover:bg-honey-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {servingCustomers.length > 0 ? 'Next number' : 'Call first number'}
+          </button>
+          <button
+            onClick={goBack}
+            disabled={completedCustomers.length === 0}
+            className="px-5 bg-white border-2 border-cream-300 text-ink-700 rounded-xl font-semibold hover:bg-cream-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Undo last call"
+            aria-label="Undo last call"
+          >
+            <Undo2 size={22} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A waiting row is a number and a name — that's what the artist scans for.
+ * Phone, join time and Remove live behind a tap, which also puts the one
+ * destructive control on this screen behind a deliberate action instead of
+ * leaving it exposed on every row.
+ */
+function WaitingRow({ customer, isNext, joinedAt, onRemove }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="w-full px-4 py-3 text-left flex items-center gap-3"
+      >
+        <span className="text-xl font-bold text-ink-900 tabular-nums shrink-0">
+          #{customer.number}
+        </span>
+        <span className="font-semibold text-ink-900 flex-1 truncate">
+          {customer.name || customer.childName || customer.parentName}
+        </span>
+        {isNext && (
+          <span className="text-[10px] font-bold uppercase tracking-wide text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full shrink-0">
+            Next
+          </span>
+        )}
+        <ChevronRight
+          size={16}
+          className={`text-stone-400 transition-transform shrink-0 ${open ? 'rotate-90' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="px-4 pb-3 -mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-500">
+          {customer.phone && (
+            <a
+              href={`tel:${customer.phone}`}
+              className="flex items-center gap-1 hover:text-ink-900 transition-colors"
+            >
+              <Phone size={12} />
+              {customer.phone}
+            </a>
+          )}
+          <span className="flex items-center gap-1">
+            <Clock size={12} />
+            Joined {joinedAt}
+          </span>
+          {customer.childName && customer.parentName && (
+            <span>Parent: {customer.parentName}</span>
+          )}
+          <button
+            onClick={onRemove}
+            className="ml-auto flex items-center gap-1 font-semibold text-red-400 hover:text-red-600 transition-colors"
+          >
+            <X size={12} />
+            Remove
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Collapsed history — a count you can open, not a wall of finished rows. */
+function Disclosure({ label, count, children }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="border-t border-cream-200">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between py-3 text-sm font-semibold text-stone-500 hover:text-ink-700 transition-colors"
+      >
+        <span>
+          {count} {label}
+        </span>
+        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+      </button>
+      {open && <div className="pb-3">{children}</div>}
+    </div>
+  );
+}
+
+function PastRow({ customer, note }) {
+  return (
+    <div className="flex items-center gap-3 px-1 py-2 text-sm text-stone-500">
+      <span className="font-bold text-stone-400 tabular-nums w-10 shrink-0">
+        #{customer.number}
+      </span>
+      <span className="truncate">
+        {customer.name || customer.childName || customer.parentName}
+      </span>
+      {note && <span className="ml-auto text-xs text-stone-400 shrink-0">{note}</span>}
     </div>
   );
 }

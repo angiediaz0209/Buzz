@@ -6,6 +6,7 @@ import { doc, collection, query, where, onSnapshot, updateDoc, deleteDoc, getDoc
 import { Eye, EyeOff, ArrowLeft, Plus, Calendar, MapPin, Palette, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getTheme } from '../utils/theme';
+import { appUrl } from '../utils/urls';
 import { useQueueCustomers } from '../hooks/useQueueCustomers';
 
 function EventDetails() {
@@ -90,6 +91,32 @@ function EventDetails() {
     }
   };
 
+  // Lets another artist attach their own line to this event. Off unless the
+  // host turns it on, because event ids are visible in the client join URL.
+  const toggleGuestLines = async () => {
+    const next = !event.allowGuestLines;
+    try {
+      await updateDoc(doc(db, 'events', eventId), { allowGuestLines: next });
+      toast.success(
+        next ? 'Other artists can add a line' : 'Only you can add lines'
+      );
+    } catch (error) {
+      console.error('Error updating guest lines:', error);
+      toast.error('Failed to update setting');
+    }
+  };
+
+  const inviteUrl = appUrl(`event/${eventId}/create-queue`);
+
+  const copyInvite = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      toast.success('Invite link copied');
+    } catch {
+      toast.error('Could not copy — select the link and copy it manually');
+    }
+  };
+
   const closeEvent = async () => {
     if (!confirm('Are you sure you want to close this event?')) return;
 
@@ -119,6 +146,9 @@ function EventDetails() {
   if (!event) return null;
 
   const theme = getTheme(event.colorTheme);
+  // A guest artist can reach this page for an event they have a line on, but
+  // the event itself isn't theirs to configure.
+  const isHost = event.artistId === currentUser?.uid;
 
   const handleDeleteQueue = async (e, queueId) => {
     e.stopPropagation();
@@ -169,6 +199,7 @@ function EventDetails() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {isHost && <>
             <button
               onClick={toggleEventVisibility}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors border-2 ${
@@ -182,12 +213,31 @@ function EventDetails() {
               {event.isVisible === false ? 'Hidden from clients' : 'Visible to clients'}
             </button>
 
+            <button
+              onClick={toggleGuestLines}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-colors border-2 ${
+                event.allowGuestLines
+                  ? 'border-honey-400 bg-honey-100 text-honey-700'
+                  : 'border-cream-300 text-stone-600 hover:border-stone-400'
+              }`}
+              title="Whether another artist may add their own line to this event"
+            >
+              <Users size={18} />
+              {event.allowGuestLines ? 'Guest artists allowed' : 'Only my lines'}
+            </button>
+
           <button
             onClick={closeEvent}
             className="px-4 py-2 border-2 border-red-300 text-red-700 rounded-lg font-semibold hover:bg-red-50 transition-colors"
           >
             Close Event
           </button>
+            </>}
+            {!isHost && (
+              <span className="px-3 py-2 rounded-lg bg-honey-100 text-honey-700 text-sm font-bold">
+                Guest artist — you manage only your own line
+              </span>
+            )}
           </div>
         </div>
 
@@ -246,6 +296,28 @@ function EventDetails() {
             </button>
           </div>
 
+          {isHost && event.allowGuestLines && (
+            <div className="mb-6 rounded-xl border-2 border-honey-300 bg-honey-50 p-5">
+              <h3 className="font-extrabold text-ink-900 mb-1">Invite another artist</h3>
+              <p className="text-sm text-stone-600 mb-3">
+                Send them this link. They sign in with their own Buzz account and add
+                their own line — they run it, you can&apos;t call their numbers and they
+                can&apos;t call yours. Clients see every line on one code.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="flex-1 min-w-0 truncate text-sm bg-white border border-cream-300 rounded-lg px-3 py-2">
+                  {inviteUrl}
+                </code>
+                <button
+                  onClick={copyInvite}
+                  className="px-4 py-2 rounded-lg bg-honey-500 text-ink-900 font-bold hover:bg-honey-600 transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+
           {queues.length === 0 ? (
             <div className="text-center py-12">
               <h3 className="text-xl font-bold text-ink-800 mb-2">No Queues Yet</h3>
@@ -269,7 +341,14 @@ function EventDetails() {
                   onClick={() => navigate(`/queue/${queue.id}/manage`)}
                 >
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-bold text-ink-900">{queue.name}</h3>
+                    <div className="min-w-0">
+                      <h3 className="text-xl font-bold text-ink-900">{queue.name}</h3>
+                      {queue.artistId !== currentUser?.uid && (
+                        <span className="inline-block mt-1 text-xs font-bold text-honey-700 bg-honey-100 rounded-full px-2 py-0.5">
+                          Guest artist
+                        </span>
+                      )}
+                    </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       queue.status === 'open' 
                         ? 'bg-sage-100 text-sage-600'
@@ -305,6 +384,7 @@ function EventDetails() {
                       Manage Queue
                     </button>
                     <button
+                      hidden={!isHost && queue.artistId !== currentUser?.uid}
                       onClick={(e) => handleDeleteQueue(e, queue.id)}
                       className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete queue"
