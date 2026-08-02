@@ -43,46 +43,46 @@ function ClientJoin() {
   useEffect(() => {
     if (!eventId) return;
 
-    // Load event and queues
-    const loadData = async () => {
-      try {
-        // Load event
-        const eventDoc = await getDoc(doc(db, 'events', eventId));
-        if (!eventDoc.exists()) {
-          toast.error('Event not found');
-          return;
-        }
-        
-        const eventData = { id: eventDoc.id, ...eventDoc.data() };
-        setEvent(eventData);
+    // Both start at once. The queues listener only needs eventId, which comes
+    // from the URL, so it was waiting on the event document for nothing — the
+    // page paid both round trips end to end instead of the slower of the two.
+    const q = query(
+      collection(db, 'queues'),
+      where('eventId', '==', eventId),
+      where('isVisible', '==', true),
+      where('status', '==', 'open')
+    );
 
-        // Load visible queues
-        const queuesRef = collection(db, 'queues');
-        const q = query(
-          queuesRef,
-          where('eventId', '==', eventId),
-          where('isVisible', '==', true),
-          where('status', '==', 'open')
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-          const queuesData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setQueues(queuesData);
-          setLoading(false);
-        });
-
-        return () => unsubscribe();
-      } catch (error) {
-        console.error('Error loading data:', error);
-        toast.error('Failed to load event');
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setQueues(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error loading lines:', error);
         setLoading(false);
       }
-    };
+    );
 
-    loadData();
+    getDoc(doc(db, 'events', eventId))
+      .then(eventDoc => {
+        if (!eventDoc.exists()) {
+          toast.error('Event not found');
+          setLoading(false);
+          return;
+        }
+        setEvent({ id: eventDoc.id, ...eventDoc.data() });
+      })
+      .catch(error => {
+        console.error('Error loading event:', error);
+        toast.error('Failed to load event');
+        setLoading(false);
+      });
+
+    // Previously returned from inside an async function, so React never got it
+    // and this listener was never torn down.
+    return () => unsubscribe();
   }, [eventId]);
 
   const handleChange = (e) => {

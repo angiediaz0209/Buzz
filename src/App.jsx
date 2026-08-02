@@ -42,8 +42,8 @@ function PublicRoute({ children }) {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router basename={ROUTER_BASE}>
+    <Router basename={ROUTER_BASE}>
+      <AuthProvider>
         <Toaster position="top-center" />
         <Suspense fallback={<RouteFallback />}>
         <Routes>
@@ -97,8 +97,8 @@ function App() {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
         </Suspense>
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
 }
 

@@ -1,31 +1,72 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { auth } from '../firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { useLocation } from 'react-router-dom';
 
 const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
 
+// Routes a client reaches by scanning a code. Nobody signs in on any of them,
+// so they must not pay for auth — not the download and not the wait.
+const CLIENT_ROUTES = [
+  /^\/artist\//,
+  /^\/join\//,
+  /^\/customer\//,
+  /^\/kiosk\//,
+  /^\/display\//,
+  /^\/event\/[^/]+\/find\/?$/
+];
+
 export function AuthProvider({ children }) {
+  const location = useLocation();
+  const isClientRoute = CLIENT_ROUTES.some(re => re.test(location.pathname));
+
   const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Client routes start resolved: there is nothing to wait for.
+  const [loading, setLoading] = useState(!isClientRoute);
+  const [authApi, setAuthApi] = useState(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+    if (isClientRoute) {
       setLoading(false);
-    });
+      return;
+    }
 
-    return unsubscribe;
-  }, []);
+    let unsubscribe;
+    let cancelled = false;
 
-  const logout = () => signOut(auth);
+    // Imported dynamically so the auth SDK lands in its own chunk instead of
+    // the bundle every client downloads.
+    (async () => {
+      try {
+        const [{ onAuthStateChanged, signOut }, { auth }] = await Promise.all([
+          import('firebase/auth'),
+          import('../auth')
+        ]);
+        if (cancelled) return;
 
-  const value = {
-    currentUser,
-    logout,
-    loading
+        setAuthApi({ signOut, auth });
+        unsubscribe = onAuthStateChanged(auth, (user) => {
+          setCurrentUser(user);
+          setLoading(false);
+        });
+      } catch (error) {
+        console.error('Auth failed to initialise:', error);
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [isClientRoute]);
+
+  const logout = async () => {
+    if (!authApi) return;
+    await authApi.signOut(authApi.auth);
   };
+
+  const value = { currentUser, logout, loading };
 
   return (
     <AuthContext.Provider value={value}>
