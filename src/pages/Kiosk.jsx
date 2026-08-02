@@ -10,10 +10,10 @@ import {
   query,
   where,
   addDoc,
-  updateDoc,
   serverTimestamp,
   onSnapshot,
-  runTransaction
+  runTransaction,
+  increment
 } from 'firebase/firestore';
 import { Check } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -48,6 +48,23 @@ function Kiosk() {
   useEffect(() => {
     if (!eventId) return;
 
+    // The queues listener only needs eventId, which comes from the URL — it was
+    // waiting on the event document for no reason, costing the kiosk a round
+    // trip before it could show anything. Fired first, in parallel.
+    let unsubQueues;
+    if (!queueId) {
+      const q = query(
+        collection(db, 'queues'),
+        where('eventId', '==', eventId),
+        where('isVisible', '==', true),
+        where('status', '==', 'open')
+      );
+      unsubQueues = onSnapshot(q, (snapshot) => {
+        setQueues(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      });
+    }
+
     const loadData = async () => {
       try {
         const eventDoc = await getDoc(doc(db, 'events', eventId));
@@ -57,36 +74,14 @@ function Kiosk() {
         }
         setEvent({ id: eventDoc.id, ...eventDoc.data() });
 
-        // If specific queue provided, load just that one
+        // A kiosk pinned to one specific line still needs that document.
         if (queueId) {
           const queueDoc = await getDoc(doc(db, 'queues', queueId));
           if (queueDoc.exists()) {
-            const queueData = { id: queueDoc.id, ...queueDoc.data() };
-            setQueues([queueData]);
+            setQueues([{ id: queueDoc.id, ...queueDoc.data() }]);
           }
-        } else {
-          // Load all visible queues
-          const queuesRef = collection(db, 'queues');
-          const q = query(
-            queuesRef,
-            where('eventId', '==', eventId),
-            where('isVisible', '==', true),
-            where('status', '==', 'open')
-          );
-
-          const unsubscribe = onSnapshot(q, (snapshot) => {
-            const queuesData = snapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-            setQueues(queuesData);
-            setLoading(false);
-          });
-
-          return () => unsubscribe();
+          setLoading(false);
         }
-
-        setLoading(false);
       } catch (error) {
         console.error('Error loading data:', error);
         setLoading(false);
@@ -94,6 +89,10 @@ function Kiosk() {
     };
 
     loadData();
+
+    // The previous version returned this cleanup from inside an async function,
+    // which React never receives — so the queues listener was never torn down.
+    return () => unsubQueues?.();
   }, [eventId, queueId]);
 
   // Countdown timer after success
@@ -131,14 +130,46 @@ function Kiosk() {
     setStep('choice');
   };
 
-  const getNextNumber = async (queueId) => {
-    const queueRef = doc(db, 'queues', queueId);
-    return await runTransaction(db, async (transaction) => {
+  // One transaction per line, mirroring ClientJoin. Was four sequential round
+  // trips per line (transaction, addDoc, updateDoc) awaited line by line; now
+  // the customer document is written inside the transaction that already reads
+  // the queue, using a locally generated ref that costs no round trip.
+  // waitingCount uses increment() so simultaneous joins can't overwrite each
+  // other's count.
+  const joinOneLine = async (queue, joinGroupId) => {
+    const queueRef = doc(db, 'queues', queue.id);
+    const customerRef = doc(collection(db, 'customers'));
+
+    const number = await runTransaction(db, async (transaction) => {
       const queueSnap = await transaction.get(queueRef);
       const next = (queueSnap.data().lastNumber || 0) + 1;
-      transaction.update(queueRef, { lastNumber: next });
+
+      transaction.update(queueRef, {
+        lastNumber: next,
+        waitingCount: increment(1)
+      });
+
+      transaction.set(customerRef, {
+        queueId: queue.id,
+        eventId,
+        number: next,
+        childName: formData.isChild ? formData.childName : '',
+        parentName: formData.parentName || '',
+        isChild: formData.isChild,
+        phone: formData.phone || '',
+        email: '',
+        notificationMethod: 'screen',
+        status: 'waiting',
+        response: null,
+        joinGroupId,
+        joinedAt: serverTimestamp(),
+        isKiosk: true
+      });
+
       return next;
     });
+
+    return { number, queueName: queue.name };
   };
 
   const handleSubmit = async (e) => {
@@ -152,40 +183,17 @@ function Kiosk() {
     try {
       // Links this person's turns so their status page can show them together
       const joinGroupId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const turns = [];
 
-      for (const queue of chosen) {
-        const nextNumber = await getNextNumber(queue.id);
+      // All chosen lines at once rather than one after another.
+      const turns = await Promise.all(
+        chosen.map(queue => joinOneLine(queue, joinGroupId))
+      );
 
-        await addDoc(collection(db, 'customers'), {
-          queueId: queue.id,
-          eventId,
-          number: nextNumber,
-          childName: formData.isChild ? formData.childName : '',
-          parentName: formData.parentName || '',
-          isChild: formData.isChild,
-          phone: formData.phone || '',
-          email: '',
-          notificationMethod: 'screen',
-          status: 'waiting',
-          response: null,
-          joinGroupId,
-          joinedAt: serverTimestamp(),
-          isKiosk: true
-        });
-
-        await updateDoc(doc(db, 'queues', queue.id), {
-          waitingCount: (queue.waitingCount || 0) + 1
-        });
-
-        turns.push({ number: nextNumber, queueName: queue.name });
-      }
-  
-      // Save to contacts if consent given. Also best-effort — a marketing
-      // opt-in must never be the reason someone doesn't get their number.
-      try {
+      // Save to contacts if consent given — deliberately NOT awaited. This is
+      // best-effort marketing capture, and awaiting it put a whole extra round
+      // trip between the person finishing the form and seeing their number.
       if (formData.marketingConsent && formData.phone) {
-        await addDoc(collection(db, 'contacts'), {
+        addDoc(collection(db, 'contacts'), {
           parentName: formData.parentName || formData.childName,
           phone: formData.phone || '',
           email: '',
@@ -195,10 +203,9 @@ function Kiosk() {
           consentDate: serverTimestamp(),
           consentText: "Yes! Notify me about future events from this artist and Buzz.",
           source: 'kiosk'
+        }).catch(() => {
+          // consent capture failed; the join itself has already succeeded
         });
-      }
-      } catch {
-        // consent capture failed; the join itself has already succeeded
       }
   
       // No event write here on purpose. Clients are unauthenticated and the rules

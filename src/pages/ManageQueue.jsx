@@ -2,18 +2,19 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { 
-  doc, 
-  getDoc, 
-  collection, 
+import {
+  doc,
+  getDoc,
+  collection,
   addDoc,
-  query, 
-  where, 
-  onSnapshot, 
+  query,
+  where,
+  onSnapshot,
   updateDoc,
   deleteDoc,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { Eye, EyeOff, ArrowLeft, Phone, Mail, Clock, RefreshCw, X, Undo2, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -34,6 +35,8 @@ function ManageQueue() {
     // Real-time listener for the queue, so "Now Serving" and the open/closed
     // state stay current while numbers are being called
     let loadedEventFor = null;
+    // Last counter values written to the queue doc, so identical writes are skipped.
+    let lastCounterSignature = null;
     const unsubscribeQueue = onSnapshot(
       doc(db, 'queues', queueId),
       async (queueDoc) => {
@@ -79,18 +82,32 @@ function ManageQueue() {
         }));
     setCustomers(customersData);
 
-    // Sync queue doc counters from real data
+    // Sync queue doc counters from real data.
+    //
+    // This used to write on every single snapshot, which made the artist's open
+    // ManageQueue tab an amplifier: one client joining fired a customers
+    // snapshot here, which wrote the queue document, which pushed a queue
+    // snapshot to every client phone, kiosk and display screen watching it.
+    // Writing only when a count actually changed removes almost all of that
+    // traffic — and the write is what clients feel, because it's their
+    // connection it travels down.
     const waiting = customersData.filter(c => c.status === 'waiting').length;
     const completed = customersData.filter(c => c.status === 'completed').length;
     const skipped = customersData.filter(c => c.status === 'skipped').length;
-    try {
-      await updateDoc(doc(db, 'queues', queueId), {
-        waitingCount: waiting,
-        totalServed: completed,
-        skippedCount: skipped
-      });
-    } catch {
-      // Non-critical — queue doc counter sync failed
+    const signature = `${waiting}/${completed}/${skipped}`;
+
+    if (signature !== lastCounterSignature) {
+      lastCounterSignature = signature;
+      try {
+        await updateDoc(doc(db, 'queues', queueId), {
+          waitingCount: waiting,
+          totalServed: completed,
+          skippedCount: skipped
+        });
+      } catch {
+        // Non-critical — queue doc counter sync failed
+        lastCounterSignature = null; // let the next snapshot retry
+      }
     }
     });
 
@@ -111,24 +128,31 @@ function ManageQueue() {
     const nextCustomer = waiting[0];
 
     try {
-      // Auto-complete everyone currently being served
+      // One batch, one round trip. This used to be a sequential updateDoc per
+      // person being served, then the call, then the queue — so the person
+      // being called only found out on their phone after every completion
+      // ahead of them had finished landing. Batching also makes it atomic:
+      // there's no longer a window where the old turn is completed but the new
+      // one was never called.
+      const batch = writeBatch(db);
+
       for (const serving of currentlyServing) {
-        await updateDoc(doc(db, 'customers', serving.id), {
+        batch.update(doc(db, 'customers', serving.id), {
           status: 'completed',
           completedAt: serverTimestamp()
         });
       }
 
-      // Call the next customer
-      await updateDoc(doc(db, 'customers', nextCustomer.id), {
+      batch.update(doc(db, 'customers', nextCustomer.id), {
         status: 'called',
         calledAt: serverTimestamp()
       });
 
-      // Update queue current number
-      await updateDoc(doc(db, 'queues', queueId), {
+      batch.update(doc(db, 'queues', queueId), {
         currentNumber: nextCustomer.number
       });
+
+      await batch.commit();
 
       if ('vibrate' in navigator) {
         navigator.vibrate(200);
@@ -162,24 +186,27 @@ function ManageQueue() {
     const lastCompleted = completed[0];
 
     try {
-      // Put current called person back to waiting
+      // Batched for the same reasons as callNextNumber: one round trip, and an
+      // undo can't half-apply.
+      const batch = writeBatch(db);
+
       for (const serving of currentlyServing) {
-        await updateDoc(doc(db, 'customers', serving.id), {
+        batch.update(doc(db, 'customers', serving.id), {
           status: 'waiting',
           calledAt: null
         });
       }
 
-      // Restore the last completed person back to called
-      await updateDoc(doc(db, 'customers', lastCompleted.id), {
+      batch.update(doc(db, 'customers', lastCompleted.id), {
         status: 'called',
         completedAt: null
       });
 
-      // Update queue current number back
-      await updateDoc(doc(db, 'queues', queueId), {
+      batch.update(doc(db, 'queues', queueId), {
         currentNumber: lastCompleted.number
       });
+
+      await batch.commit();
 
       toast.success(`Restored #${lastCompleted.number} - ${lastCompleted.name || lastCompleted.childName || lastCompleted.parentName}`);
 

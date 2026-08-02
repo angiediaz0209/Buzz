@@ -84,7 +84,16 @@ function CustomerView() {
     const byChunk = new Map();
     const unsubscribes = chunks.map((chunk, index) =>
       onSnapshot(
-        query(collection(db, 'customers'), where('queueId', 'in', chunk)),
+        // Only waiting turns, because that's all aheadOf() counts. Without the
+        // status filter this streamed every customer in the line — including
+        // everyone already served — down to each client's phone, and re-streamed
+        // the lot on every change. Two equality filters need no composite index;
+        // that was checked against the real database before relying on it.
+        query(
+          collection(db, 'customers'),
+          where('queueId', 'in', chunk),
+          where('status', '==', 'waiting')
+        ),
         (snapshot) => {
           byChunk.set(index, snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
           setPeers(Array.from(byChunk.values()).flat());

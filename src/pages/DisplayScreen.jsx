@@ -9,7 +9,10 @@ function DisplayScreen() {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [queues, setQueues] = useState([]);
-  const [selectedQueue, setSelectedQueue] = useState(null);
+  // Only the id is state. selectedQueue itself is derived below — holding a
+  // copy of the queue document meant two effects re-syncing it on every
+  // snapshot, which cascaded renders on a screen that's meant to sit up all day.
+  const [selectedQueueId, setSelectedQueueId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,21 +44,10 @@ function DisplayScreen() {
     return () => unsubscribe();
   }, [eventId]);
 
-  // Auto-select when there's exactly one queue
-  useEffect(() => {
-    if (queues.length === 1 && !selectedQueue) {
-      setSelectedQueue(queues[0]);
-    }
-  }, [queues, selectedQueue]);
-
-  // Keep selectedQueue data in sync with real-time updates
-  useEffect(() => {
-    if (!selectedQueue) return;
-    const updated = queues.find(q => q.id === selectedQueue.id);
-    if (updated) {
-      setSelectedQueue(updated);
-    }
-  }, [queues]);
+  // Always the live document, never a stale copy. One queue auto-selects.
+  const selectedQueue =
+    queues.find(q => q.id === selectedQueueId) ||
+    (queues.length === 1 ? queues[0] : null);
 
   if (loading) {
     return (
@@ -97,7 +89,7 @@ function DisplayScreen() {
           {queues.map((queue) => (
             <button
               key={queue.id}
-              onClick={() => setSelectedQueue(queue)}
+              onClick={() => setSelectedQueueId(queue.id)}
               className={`w-full bg-white rounded-2xl shadow-lg p-8 hover:shadow-xl transition-all text-left border-4 border-transparent ${theme.hoverBorder}`}
             >
               <div className="flex justify-between items-center">
@@ -164,7 +156,7 @@ function DisplayScreen() {
       {/* Back button — only if multiple queues */}
       {queues.length > 1 && (
         <button
-          onClick={() => setSelectedQueue(null)}
+          onClick={() => setSelectedQueueId(null)}
           className="absolute top-6 left-6 px-4 py-2 bg-white text-ink-700 rounded-xl text-sm font-bold border-2 border-cream-300 hover:border-honey-400 transition-colors"
         >
           ← Change queue
