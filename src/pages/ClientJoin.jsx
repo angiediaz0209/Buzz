@@ -156,7 +156,7 @@ function ClientJoin() {
       const isKiosk = !!location.state?.kiosk;
       setTimeout(() => {
         if (isKiosk) {
-          navigate(`/artist/${location.state.artistUsername}?kiosk=1`, { state: { returnToChoice: true } });
+          navigate(`/artist/${location.state.artistUsername}?kiosk=1`);
         } else {
           navigate(`/customer/${docRef.id}`);
         }
@@ -261,7 +261,7 @@ function ClientJoin() {
 
   const handleBack = () => {
     if (location.state?.kiosk && location.state?.artistUsername) {
-      navigate(`/artist/${location.state.artistUsername}`, { state: { returnToChoice: true } });
+      navigate(`/artist/${location.state.artistUsername}`);
     } else {
       navigate(-1);
     }

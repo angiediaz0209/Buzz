@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../firebase';
-import { 
-  collection, 
-  query, 
-  where, 
-  getDocs,
+import {
+  collection,
+  query,
+  where,
+  doc,
+  getDoc,
   onSnapshot,
   orderBy
 } from 'firebase/firestore';
 import { ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { BuzzMark, Mascot } from '../components/BuzzBrand';
 import TurnChoice from '../components/TurnChoice';
 
 function ArtistProfile() {
@@ -22,7 +22,9 @@ function ArtistProfile() {
   const [artist, setArtist] = useState(null);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [step, setStep] = useState(location.state?.returnToChoice ? 'choice' : 'welcome');
+  // A scanned code lands straight on the two buttons. There is no splash step:
+  // someone standing at the table with their phone out is already committed.
+  const [step, setStep] = useState('choice');
   // Which button brought them to the event picker: 'join' or 'find'.
   const [intent, setIntent] = useState('join');
 
@@ -32,53 +34,56 @@ function ArtistProfile() {
   useEffect(() => {
     if (!username) return;
 
+    let unsubscribe;
+
+    // This runs on a client's phone over venue wifi, so every round trip here
+    // is felt. It used to make three, one waiting on the next: look up the
+    // username, load the artist profile, then query events. Two are gone —
+    // the username lookup is a direct document read instead of a query, and
+    // the profile fetch was only ever used for a display name this screen no
+    // longer shows, so events are queried straight off the username doc.
     const loadArtistProfile = async () => {
       try {
-        // Find artist by username
-        const usernameDoc = await getDocs(
-          query(collection(db, 'usernames'), where('__name__', '==', username.toLowerCase()))
-        );
+        const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
 
-        if (usernameDoc.empty) {
+        if (!usernameDoc.exists()) {
           toast.error('Artist not found');
           setLoading(false);
           return;
         }
 
-        const userId = usernameDoc.docs[0].data().userId;
+        const userId = usernameDoc.data().userId;
+        // The username document existing is what proves the artist does; the
+        // profile document is not on the critical path any more.
+        setArtist({ id: userId });
 
-        // Load artist profile
-        const artistDoc = await getDocs(
-          query(collection(db, 'artists'), where('__name__', '==', userId))
+        // What clients see is the artist's explicit choice: an active event
+        // that hasn't been hidden. There is deliberately no date filter — it
+        // used to compare a UTC-midnight event date against local midnight,
+        // which hid an event on its own day for anyone west of UTC.
+        const q = query(
+          collection(db, 'events'),
+          where('artistId', '==', userId),
+          where('status', '==', 'active'),
+          orderBy('date', 'asc')
         );
 
-        if (!artistDoc.empty) {
-          setArtist({ id: userId, ...artistDoc.docs[0].data() });
-
-          // What clients see is the artist's explicit choice: an active event
-          // that hasn't been hidden. There is deliberately no date filter — it
-          // used to compare a UTC-midnight event date against local midnight,
-          // which hid an event on its own day for anyone west of UTC.
-          const eventsRef = collection(db, 'events');
-          const q = query(
-            eventsRef,
-            where('artistId', '==', userId),
-            where('status', '==', 'active'),
-            orderBy('date', 'asc')
-          );
-
-          const unsubscribe = onSnapshot(q, (snapshot) => {
+        unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
             const eventsData = snapshot.docs
-              .map(doc => ({ id: doc.id, ...doc.data() }))
+              .map(d => ({ id: d.id, ...d.data() }))
               // legacy events predate the flag, so only an explicit false hides one
               .filter(event => event.isVisible !== false);
 
             setEvents(eventsData);
             setLoading(false);
-          });
-
-          return () => unsubscribe();
-        }
+          },
+          (error) => {
+            console.error('Error loading events:', error);
+            setLoading(false);
+          }
+        );
       } catch (error) {
         console.error('Error loading artist profile:', error);
         toast.error('Failed to load artist profile');
@@ -87,6 +92,8 @@ function ArtistProfile() {
     };
 
     loadArtistProfile();
+
+    return () => unsubscribe?.();
   }, [username]);
 
 
@@ -112,39 +119,12 @@ function ArtistProfile() {
     );
   }
 
-  // Welcome / splash screen
-  if (step === 'welcome') {
-    return (
-      <div className="min-h-screen bg-cream-100 flex flex-col items-center px-6 py-10">
-        <BuzzMark size={40} textClass="text-4xl" className="text-ink-900" />
-
-        <div className="flex-1 flex items-center justify-center w-full">
-          <Mascot className="w-56 sm:w-72 h-auto" alt="Buzz the bee, ready to take your name" />
-        </div>
-
-        <p className="text-2xl font-extrabold text-ink-900 text-center leading-snug mb-8">
-          Your place in line,
-          <br />
-          made <span className="text-honey-500">simple</span>.
-        </p>
-
-        <button
-          onClick={() => setStep('choice')}
-          className="bg-honey-500 text-ink-900 font-extrabold text-2xl w-full max-w-sm py-5 rounded-2xl shadow-lg hover:bg-honey-600 transition-colors"
-        >
-          Start
-        </button>
-      </div>
-    );
-  }
-
   // Choice screen — take a number, or look up one you already have
   if (step === 'choice') {
     return (
       // No artist name here on purpose — a client scanning a code already knows
       // whose table they are standing at, and the two buttons are the whole point.
       <TurnChoice
-        onBack={() => setStep('welcome')}
         onGetTurn={() => {
           setIntent('join');
           if (events.length === 1) {

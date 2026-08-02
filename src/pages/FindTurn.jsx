@@ -16,7 +16,7 @@ function FindTurn() {
   // artist's page, then to plain history.
   const goBack = () => {
     if (returnTo) navigate(returnTo);
-    else if (artistUsername) navigate(`/artist/${artistUsername}`, { state: { returnToChoice: true } });
+    else if (artistUsername) navigate(`/artist/${artistUsername}`);
     else navigate(-1);
   };
   const [searchQuery, setSearchQuery] = useState('');
